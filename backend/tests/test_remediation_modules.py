@@ -230,7 +230,9 @@ def test_remediate_produces_a_proposed_change_in_a_new_workspace(db, tmp_path, f
     assert remediation.status == RemediationStatus.PROPOSED
     assert remediation.recommended_version == "2.31.0" and remediation.confidence_score > 0.5
     change = remediation.proposed_change
-    workspace = Path(change["workspace_path"])
+    # stored relative to the workspace (audit F-10)
+    assert change["workspace_path"] == f"remediations/{remediation.remediation_id}"
+    workspace = tmp_path / "ws" / change["workspace_path"]
     assert workspace.exists() and workspace != Path(finding.analysis.repository.local_path)
     assert (workspace / "requirements.txt").read_text() == "requests==2.31.0\nflask==3.0.0\n"
     assert Path(finding.analysis.repository.local_path, "requirements.txt").read_text().startswith("requests==2.30.0")

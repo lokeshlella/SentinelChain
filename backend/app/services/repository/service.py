@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ConflictError, NotFoundError, RepositoryError, SentinelError, ValidationFailedError
+from app.core.paths import resolve_workspace_path, to_workspace_relative
 from app.core.logging import get_stage_logger
 from app.models import Component, Repository
 from app.models.enums import SourceType
@@ -125,7 +126,7 @@ class RepositoryService:
                 logger.warning("%s: %s", repository.name, warning)
         else:
             logger.info("Using existing working copy of %s at %s", repository.name, destination)
-        repository.local_path = str(destination)
+        repository.local_path = to_workspace_relative(destination, self.settings)
 
         profile = self._analyze(destination, repository)
         repository.profile = profile.to_dict()
@@ -154,7 +155,7 @@ class RepositoryService:
         repository = self.get(repository_id)
         paths = {self.workspace_dir(repository_id)}
         if repository.local_path:
-            owned = self._owned_workspace_path(repository_id, Path(repository.local_path))
+            owned = self._owned_workspace_path(repository_id, resolve_workspace_path(repository.local_path, self.settings))
             if owned is not None:
                 paths.add(owned)
             else:
@@ -203,6 +204,10 @@ class RepositoryService:
 
     def workspace_dir(self, repository_id: int) -> Path:
         return self.settings.workspace_path / REPOS_SUBDIR / str(repository_id)
+
+    def local_path_of(self, repository: Repository) -> Path | None:
+        """The working copy of ``repository`` on this instance (stored relative to the workspace)."""
+        return resolve_workspace_path(repository.local_path, self.settings)
 
     def profile_of(self, repository: Repository) -> RepositoryProfile:
         """Typed view of ``repository.profile``."""

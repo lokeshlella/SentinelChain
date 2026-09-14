@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.api.serializers import finding_summary
 from app.core.exceptions import NotFoundError
+from app.core.paths import resolve_workspace_path
 from app.models import Dependency, DependencyRelation, Finding
 from app.schemas.entities import DependencyDetail, RelationOut, VulnerabilitySummary
 from app.services.analysis.usage import SourceUsageAnalyzer
@@ -77,7 +78,7 @@ def dependency_graph(
 def dependency_usage(dependency_id: int, db: Session = deps.DbDep) -> dict:
     dep = _get(db, dependency_id)
     repository = dep.repository
-    path = Path(repository.local_path or "")
+    path = resolve_workspace_path(repository.local_path) or Path("")
     if not path.exists():
         return {"available": False, "message": "Working copy not available; re-run the analysis with refresh=true"}
     evidence = SourceUsageAnalyzer().find_usage(path, dep.package_name, dep.ecosystem, [c.path for c in repository.components])

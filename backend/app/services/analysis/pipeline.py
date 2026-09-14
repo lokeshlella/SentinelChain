@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import Settings, get_settings
 from app.core.exceptions import NotFoundError, SentinelError
 from app.core.logging import get_stage_logger
+from app.core.paths import resolve_workspace_path
 from app.db.base import utcnow
 from app.models import Analysis, Dependency, DependencyRelation, Finding, Repository, Vulnerability
 from app.models.enums import AIStatus, AnalysisStatus, RiskLevel, StageStatus
@@ -124,11 +125,11 @@ class AnalysisPipeline:
 
     def _stage_repository(self, analysis: Analysis, repository: Repository, refresh: bool) -> Path:
         self._set_stage(analysis, "repository", StageStatus.RUNNING)
-        path = Path(repository.local_path) if repository.local_path else None
+        path = resolve_workspace_path(repository.local_path, self.settings)
         if refresh or path is None or not path.exists():
             log.info("Working copy missing or refresh requested; ingesting %s", repository.source_url)
             repository = self.repositories.ingest(repository, refresh=True)
-            path = Path(repository.local_path or "")
+            path = resolve_workspace_path(repository.local_path, self.settings) or Path("")
         if not path.exists():
             raise SentinelError(f"Working copy of repository {repository.repository_id} is missing at {path}")
         profile = RepositoryProfile.from_dict(repository.profile or {})
