@@ -81,16 +81,22 @@ def test_full_run_completes_with_findings_and_ai(db, settings, repository):
     assert finding.ai_results["status"] == "COMPLETED"
     assert "Dependency analysis:" in finding.reasoning
     assert graph.synced[0]["usage"] == {finding.dependency_id: ["src"]}
+    assert graph.synced[0]["preserve"] is False and analysis.stages["knowledge_graph"] == StageStatus.OK
     assert analysis.summary["vulnerabilities"]["vulnerable"] == 1
     assert analysis.overall_risk == finding.risk_level
 
 
 def test_osv_unavailable_degrades_to_unknown_never_safe(db, settings, repository):
+    graph = FakeGraphService()
     analysis = new_analysis(db, repository)
-    make_pipeline(db, settings, provider=FakeVulnerabilityProvider(available=False), llm=FakeLLMProvider([])).run(analysis.analysis_id)
+    make_pipeline(db, settings, provider=FakeVulnerabilityProvider(available=False), graph=graph, llm=FakeLLMProvider([])).run(analysis.analysis_id)
     db.refresh(analysis)
     assert analysis.status == AnalysisStatus.COMPLETED
     assert analysis.stages["vulnerabilities"] == StageStatus.UNAVAILABLE
+    # F-03: the graph is synced in preserve mode and reported PARTIAL, never OK
+    assert graph.synced[0]["preserve"] is True
+    assert analysis.stages["knowledge_graph"] == StageStatus.PARTIAL
+    assert any("previously known vulnerability relationships were kept" in w for w in analysis.summary["warnings"])
     assert {d.vulnerability_status for d in analysis.dependencies} == {VulnerabilityStatus.UNKNOWN}
     assert all("unavailable" in (d.status_reason or "").lower() or "pinned" in (d.status_reason or "") for d in analysis.dependencies)
     assert analysis.findings == []
