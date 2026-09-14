@@ -119,7 +119,7 @@ Follow `docs/DEMO.md`; in short:
 | Evidence | `services/analysis/usage.py` | import/require scan of the working copy → files, lines, components |
 | Agents | `services/llm`, `services/agents` | Ollama via `/api/chat` with JSON-schema output; dependency → impact → risk → remediation agents; Pydantic validation, correction re-prompts, guardrails against invented components/versions |
 | Remediation | `services/remediation` | OSV fixed versions → registry (PyPI/npm, yanked/deprecated skipped) → OSV re-verification → LLM choice → deterministic edit in a temporary copy |
-| Validation | `services/sandbox` | Docker container (no mounts, caps dropped, limits, timeout): install + tests; OSV security scan of the new version |
+| Validation | `services/sandbox` | Docker container (non-root, read-only rootfs, no mounts, caps dropped, limits, timeout): install + tests; OSV security scan of the new version |
 | Report | `services/reports` | 10-section evidence report (facts / AI reasoning / recommendations / validation) in JSON + Markdown |
 | PR | `services/github` | branch + commit + push + **draft** PR via PyGithub; manual instructions without a token |
 

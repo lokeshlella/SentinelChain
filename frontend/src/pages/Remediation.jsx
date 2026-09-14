@@ -109,6 +109,11 @@ export default function Remediation() {
   const latestValidation = validations.length ? validations[validations.length - 1] : null
   const validationFailed = latestValidation && String(latestValidation.overall_result || '').toUpperCase() === 'FAIL'
   const validationPassed = latestValidation && String(latestValidation.overall_result || '').toUpperCase() === 'PASS'
+  // Build + security passed but no test suite ran: allowed to open a PR, but flagged (audit F-09).
+  const validationPartial = latestValidation
+    && String(latestValidation.build_status || '').toUpperCase() === 'PASS'
+    && String(latestValidation.security_scan_status || '').toUpperCase() === 'PASS'
+    && String(latestValidation.test_status || '').toUpperCase() === 'SKIPPED'
   const status = String(rem.status || '').toUpperCase()
   const canValidate = !!change && status !== 'FAILED' && !isActive(status)
   const ai = rem.ai_result && typeof rem.ai_result === 'object' ? rem.ai_result : null
@@ -246,7 +251,7 @@ export default function Remediation() {
         subtitle="Creates a branch with the validated change and opens a DRAFT pull request on GitHub (never merged automatically). Without credentials the PR is recorded as UNAVAILABLE with manual instructions."
         actions={
           <>
-            {(validationFailed || !validationPassed) && (
+            {(validationFailed || (!validationPassed && !validationPartial)) && (
               <label className="check" title="Create the PR even though the validation did not pass">
                 <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} disabled={prBusy} />
                 force (skip validation gate)
@@ -259,6 +264,7 @@ export default function Remediation() {
         }
       >
         {validationFailed && <div className="alert error">The latest validation failed. Tick "force" to create the pull request anyway.</div>}
+        {validationPartial && !validationPassed && <div className="alert info"><strong>Partially validated:</strong> the change installs and the OSV scan is clean, but no test suite ran (overall <StatusBadge value={latestValidation.overall_result} />). A draft PR can be opened; the change must be tested manually before merging.</div>}
         {!latestValidation && change && <div className="alert info">No validation has been run yet. The backend may refuse to open a PR without a passing validation unless "force" is ticked.</div>}
         {prError && <ErrorBox error={prError} title="Could not create the pull request" />}
         <Table

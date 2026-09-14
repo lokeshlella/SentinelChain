@@ -354,3 +354,52 @@ def test_wrong_credentials_degrade_gracefully(fixture):
         assert KnowledgeGraphService(client=client).dependency_paths(fixture.dependencies["requests"]) == []
     finally:
         wrong.close()
+
+
+# ---------------------------------------------------------------- audit F-03: preserve mode against a real Neo4j
+
+
+@pytest.mark.integration
+def test_preserve_mode_keeps_affected_by_edges_of_unchecked_dependencies(client, service, fixture, synced):
+    rid = TEST_REPOSITORY_ID
+    count_affected = "MATCH (:Repository {repository_id: $rid})-[:USES]->(:Dependency)-[a:AFFECTED_BY]->() RETURN count(a) AS n"
+    count_component_uses = "MATCH (:Component {repository_id: $rid})-[u:USES]->() RETURN count(u) AS n"
+    before_affected = _count(client, count_affected, rid=rid)
+    before_uses = _count(client, count_component_uses, rid=rid)
+    assert before_affected >= 1 and before_uses >= 1
+
+    # 1. A degraded analysis: OSV answered nothing, every dependency is UNKNOWN, no findings,
+    #    no usage evidence — exactly what the pipeline hands over during an OSV outage.
+    for dep in fixture.dependency_list:
+        dep.vulnerability_status = "UNKNOWN"
+    result = service.sync_analysis(
+        fixture.repository, fixture.components, fixture.dependency_list, fixture.relations, {}, {},
+        preserve_unknown_vulnerability_edges=True,
+    )
+    assert result.ok and result.preserved_unknown_edges
+    assert _count(client, count_affected, rid=rid) == before_affected, "AFFECTED_BY edges were wiped by a degraded sync"
+    assert _count(client, count_component_uses, rid=rid) == before_uses
+    statuses = {r["s"] for r in client.run("MATCH (:Repository {repository_id: $rid})-[:USES]->(d) RETURN DISTINCT d.status AS s", rid=rid)}
+    assert statuses == {"UNKNOWN"}  # the node status is truthful while the last known edges are kept
+
+    # 2. The same degraded sync WITHOUT preserve mode is the old behaviour: edges disappear.
+    #    (Kept as a demonstration that the flag is what makes the difference.)
+    result = service.sync_analysis(fixture.repository, fixture.components, fixture.dependency_list, fixture.relations, {}, {})
+    assert result.ok and not result.preserved_unknown_edges
+    assert _count(client, count_affected, rid=rid) == 0
+
+    # 3. A later successful analysis restores the edges and marks the dependency VULNERABLE again.
+    for dep in fixture.dependency_list:
+        dep.vulnerability_status = "VULNERABLE" if dep.package_name == "requests" else "SAFE"
+    service.sync_analysis(fixture.repository, fixture.components, fixture.dependency_list, fixture.relations, fixture.dep_vulns(), fixture.component_usage())
+    assert _count(client, count_affected, rid=rid) == before_affected
+
+    # 4. Preserve mode still refreshes dependencies that WERE checked: a dependency now SAFE loses its edges.
+    for dep in fixture.dependency_list:
+        dep.vulnerability_status = "SAFE"
+    result = service.sync_analysis(
+        fixture.repository, fixture.components, fixture.dependency_list, fixture.relations, {}, {},
+        preserve_unknown_vulnerability_edges=True,
+    )
+    assert result.ok
+    assert _count(client, count_affected, rid=rid) == 0

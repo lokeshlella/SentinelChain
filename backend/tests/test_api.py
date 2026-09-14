@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -223,3 +224,34 @@ def test_analyze_refused_while_ingestion_pending(client, engine):
         session.commit()
     response = client.post(f"/api/repositories/{repo['repository_id']}/analyze", json={})
     assert response.status_code == 409 and "ingestion" in response.json()["message"].lower()
+
+
+def test_database_unavailable_is_reported_as_503_not_500(engine):
+    """Audit F-04: a PostgreSQL outage must surface as a clear 503, not a 500 with driver text."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    dead = create_engine("postgresql+psycopg://sentinel:secret@127.0.0.1:1/sentinelchain", connect_args={"connect_timeout": 1})
+    factory = sessionmaker(bind=dead, autoflush=False, expire_on_commit=False, future=True)
+
+    def override_db():
+        session = factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[deps.get_db] = override_db
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            for path in ("/api/repositories", "/api/dashboard", "/api/analyses/1", "/api/findings"):
+                response = client.get(path)
+                assert response.status_code == 503, (path, response.text)
+                body = response.json()
+                assert body["error"] == "DatabaseUnavailable" and "PostgreSQL is not reachable" in body["message"]
+                assert "secret" not in response.text and "psycopg.OperationalError" not in body["message"]
+                assert response.headers.get("retry-after") == "5"
+            with patch("app.api.routes.health.check_database", return_value=(False, "refused")):
+                assert client.get("/api/health").status_code == 200  # health keeps answering
+    finally:
+        app.dependency_overrides.clear()

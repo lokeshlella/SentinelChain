@@ -86,6 +86,17 @@ class Settings(BaseSettings):
     docker_node_image: str = "node:20-slim"
     docker_memory_limit: str = "2g"
     docker_cpu_limit: float = 2.0
+    docker_sandbox_user: str = Field(
+        default="65534:65534",
+        description="uid:gid the sandbox steps run as (never root). The workspace tmpfs is owned by this user.",
+    )
+    docker_sandbox_network: str = Field(
+        default="bridge",
+        description="Docker network mode for the sandbox: 'bridge' (package registries reachable — needed for pip/npm "
+        "install) or 'none' for repositories with vendored dependencies.",
+    )
+    docker_read_only_rootfs: bool = Field(default=True, description="Mount the sandbox root filesystem read-only.")
+    docker_workspace_tmpfs_size: str = Field(default="1g", description="Size of the in-memory /workspace tmpfs of the sandbox.")
 
     # --- External services -------------------------------------------------
     osv_api_url: str = "https://api.osv.dev/v1"

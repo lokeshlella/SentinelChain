@@ -17,11 +17,13 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationFailedError
 from app.core.logging import get_stage_logger
+from app.core.paths import resolve_workspace_path
 from app.models import PullRequest, Remediation, Validation
 from app.models.enums import CheckResult, PullRequestStatus, RemediationStatus, ValidationStatus
 from app.services.github.base import GitProvider, PullRequestResult, PullRequestSpec
 from app.services.github.github_provider import GitHubProvider
 from app.services.github.instructions import build_manual_instructions
+from app.services.sandbox.service import is_partial_pass
 
 log = get_stage_logger("GitHub")
 
@@ -51,7 +53,7 @@ class PullRequestService:
         dependency = finding.dependency
         repository = finding.analysis.repository
         change = remediation.proposed_change or {}
-        workspace = Path(str(change.get("workspace_path") or ""))
+        workspace = resolve_workspace_path(str(change.get("workspace_path") or ""), self.settings) or Path("")
 
         title = build_pr_title(dependency.package_name, remediation.current_version, remediation.recommended_version, finding.vulnerability.identifier)
         branch = build_branch_name(dependency.ecosystem, dependency.package_name, remediation.recommended_version)
@@ -117,7 +119,7 @@ class PullRequestService:
         change = remediation.proposed_change or {}
         if not change.get("file") or not change.get("workspace_path"):
             raise ValidationFailedError(f"Remediation {remediation_id} has no proposed change to publish")
-        if not Path(str(change["workspace_path"])).is_dir():
+        if not (resolve_workspace_path(str(change["workspace_path"]), self.settings) or Path("")).is_dir():
             raise ValidationFailedError(
                 f"Remediation {remediation_id}: working copy is missing; re-run the remediation and validation"
             )
@@ -135,7 +137,8 @@ class PullRequestService:
                 f"Remediation {remediation.remediation_id} has not been validated; validate it in the sandbox first",
                 details={"remediation_id": remediation.remediation_id},
             )
-        if validation.overall_result != CheckResult.PASS and not force:
+        partial = is_partial_pass(validation.build_status, validation.test_status, validation.security_scan_status)
+        if validation.overall_result != CheckResult.PASS and not partial and not force:
             raise ConflictError(
                 f"Validation {validation.validation_id} result is {validation.overall_result}; "
                 "pass force=true to open a pull request anyway",
@@ -254,9 +257,13 @@ def build_pr_body(remediation: Remediation, validation: Validation, report_path:
         "",
         "## Validation (Docker sandbox)",
         f"- **Build / install:** {validation.build_status}",
-        f"- **Tests:** {validation.test_status}",
+        f"- **Tests:** {validation.test_status}"
+        + (" — no test suite was detected; the change is **not** behaviourally verified, test it manually before merging"
+           if validation.test_status == CheckResult.SKIPPED else ""),
         f"- **Security scan (OSV on the new version):** {validation.security_scan_status}",
-        f"- **Overall:** {validation.overall_result}",
+        f"- **Overall:** {validation.overall_result}"
+        + (" (partially validated: install and security scan passed, tests skipped)"
+           if is_partial_pass(validation.build_status, validation.test_status, validation.security_scan_status) else ""),
     ]
     lines += [f"- Warning: {w}" for w in warnings]
     lines += ["", "## Remediation rationale", remediation.recommendation or "n/a", "", "## Proposed change", f"```diff\n{change.get('diff', '')}\n```"]

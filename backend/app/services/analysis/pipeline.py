@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import Settings, get_settings
 from app.core.exceptions import NotFoundError, SentinelError
 from app.core.logging import get_stage_logger
+from app.core.paths import resolve_workspace_path
 from app.db.base import utcnow
 from app.models import Analysis, Dependency, DependencyRelation, Finding, Repository, Vulnerability
 from app.models.enums import AIStatus, AnalysisStatus, RiskLevel, StageStatus
@@ -74,6 +75,7 @@ class AnalysisPipeline:
         analysis.stages = {stage: StageStatus.PENDING for stage in STAGES}
         analysis.summary = {"repository": repository.name, "warnings": []}
         analysis.error_message = None
+        self._vulnerability_check_status = StageStatus.OK
         self._commit()
         log.info("Analysis %d started for repository %d (%s)", analysis.analysis_id, repository.repository_id, repository.name)
         started = time.monotonic()
@@ -125,11 +127,11 @@ class AnalysisPipeline:
 
     def _stage_repository(self, analysis: Analysis, repository: Repository, refresh: bool) -> Path:
         self._set_stage(analysis, "repository", StageStatus.RUNNING)
-        path = Path(repository.local_path) if repository.local_path else None
+        path = resolve_workspace_path(repository.local_path, self.settings)
         if refresh or path is None or not path.exists():
             log.info("Working copy missing or refresh requested; ingesting %s", repository.source_url)
             repository = self.repositories.ingest(repository, refresh=True)
-            path = Path(repository.local_path or "")
+            path = resolve_workspace_path(repository.local_path, self.settings) or Path("")
         if not path.exists():
             raise SentinelError(f"Working copy of repository {repository.repository_id} is missing at {path}")
         profile = RepositoryProfile.from_dict(repository.profile or {})
@@ -160,6 +162,8 @@ class AnalysisPipeline:
     def _stage_vulnerabilities(self, analysis: Analysis, deps: list[Dependency]) -> list[Finding]:
         self._set_stage(analysis, "vulnerabilities", StageStatus.RUNNING)
         check = self.vulnerabilities.check_dependencies(deps)
+        # Remembered for the graph stage: an unavailable/partial check must not erase known edges.
+        self._vulnerability_check_status = StageStatus(check.stage_status)
         findings = self.vulnerabilities.create_findings(analysis, check.dep_vulns)
         self._merge_summary(analysis, {"vulnerabilities": {**check.to_dict(), "findings": len(findings)}})
         if not check.provider_available:
@@ -204,8 +208,12 @@ class AnalysisPipeline:
         for finding in findings:
             dep_vulns.setdefault(finding.dependency_id, []).append(finding.vulnerability)
         relations = self._relations_for(deps)
+        preserve = getattr(self, "_vulnerability_check_status", StageStatus.OK) != StageStatus.OK
         try:
-            result = self.graph.sync_analysis(repository, repository.components, deps, relations, dep_vulns, component_usage)
+            result = self.graph.sync_analysis(
+                repository, repository.components, deps, relations, dep_vulns, component_usage,
+                preserve_unknown_vulnerability_edges=preserve,
+            )
         except Exception as exc:  # noqa: BLE001 - the graph is optional
             log.warning("Knowledge graph sync raised: %s", exc)
             self._merge_summary(analysis, {"knowledge_graph": {"available": False, "error": str(exc)}})
@@ -218,6 +226,12 @@ class AnalysisPipeline:
         elif result.error:
             self._add_warnings(analysis, [f"Knowledge graph sync failed: {result.error}"])
             self._set_stage(analysis, "knowledge_graph", StageStatus.FAILED)
+        elif preserve:
+            self._add_warnings(analysis, [
+                "Knowledge graph: vulnerability data was unavailable for unchecked dependencies; "
+                "their previously known vulnerability relationships were kept (not refreshed)"
+            ])
+            self._set_stage(analysis, "knowledge_graph", StageStatus.PARTIAL)
         else:
             self._set_stage(analysis, "knowledge_graph", StageStatus.OK)
 

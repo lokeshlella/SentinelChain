@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app import __version__
 from app.api.router import api_router
@@ -89,6 +90,28 @@ async def sentinel_error_handler(_: Request, exc: SentinelError) -> JSONResponse
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.__class__.__name__, "message": exc.message, "details": exc.details},
+    )
+
+
+@app.exception_handler(OperationalError)
+@app.exception_handler(InterfaceError)
+async def database_unavailable_handler(_: Request, exc: Exception) -> JSONResponse:
+    """PostgreSQL cannot be reached (connection refused, server shut down, network).
+
+    Reported as 503 with a plain message instead of a 500 carrying driver text (audit F-04).
+    The health endpoint keeps answering so operators can see which service is down.
+    """
+    cause = str(getattr(exc, "orig", None) or exc).splitlines()[0][:200]
+    logger.error("Database unavailable: %s", cause)
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "5"},
+        content={
+            "error": "DatabaseUnavailable",
+            "message": "PostgreSQL is not reachable. Check that the database is running "
+            "(docker compose up -d postgres) and that DATABASE_URL is correct.",
+            "details": {"cause": cause},
+        },
     )
 
 

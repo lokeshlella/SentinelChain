@@ -71,6 +71,8 @@ class GraphSyncResult:
     stale_relationships_deleted: int = 0
     nodes_pruned: int = 0
     skipped: dict[str, int] = field(default_factory=dict)
+    #: True when vulnerability edges of unchecked (UNKNOWN) dependencies were kept from the previous analysis.
+    preserved_unknown_edges: bool = False
 
     @property
     def ok(self) -> bool:
@@ -83,6 +85,7 @@ class GraphSyncResult:
             "relationships_written": self.relationships_written,
             "error": self.error,
             "stale_relationships_deleted": self.stale_relationships_deleted,
+            "preserved_unknown_edges": self.preserved_unknown_edges,
             "nodes_pruned": self.nodes_pruned,
             "skipped": dict(self.skipped),
         }
@@ -406,6 +409,22 @@ MATCH (:Dependency {repository_id: $repository_id})-[rel:DEPENDS_ON|AFFECTED_BY]
 DELETE rel
 RETURN count(*) AS n"""
 
+# Preserve mode (vulnerability data was unavailable / partial for this analysis): the
+# dependency nodes were already merged with their NEW status, so edges of dependencies that
+# could not be checked (status UNKNOWN) are kept from the previous analysis instead of being
+# wiped — the graph then shows the last known vulnerability state rather than nothing.
+CYPHER_DELETE_STALE_COMPONENT_EDGES_PRESERVE = """// kg:delete-stale-component-edges-preserve
+MATCH (:Component {repository_id: $repository_id})-[rel:USES]->(d:Dependency)
+WHERE coalesce(d.status, '') <> 'UNKNOWN'
+DELETE rel
+RETURN count(*) AS n"""
+
+CYPHER_DELETE_STALE_DEPENDENCY_EDGES_PRESERVE = """// kg:delete-stale-dependency-edges-preserve
+MATCH (d:Dependency {repository_id: $repository_id})-[rel:DEPENDS_ON|AFFECTED_BY]->()
+WHERE type(rel) = 'DEPENDS_ON' OR coalesce(d.status, '') <> 'UNKNOWN'
+DELETE rel
+RETURN count(*) AS n"""
+
 CYPHER_MERGE_CONTAINS = """// kg:merge-contains
 MATCH (r:Repository {repository_id: $repository_id})
 UNWIND $rows AS row
@@ -550,9 +569,15 @@ SCHEMA_STATEMENTS_COMMUNITY: tuple[str, ...] = (
 )
 
 
-def sync_statements(batches: SyncBatches) -> list[SyncStatement]:
-    """The ordered statements of one sync transaction: nodes → stale-edge deletion → edges → pruning."""
+def sync_statements(batches: SyncBatches, *, preserve_unknown_vulnerability_edges: bool = False) -> list[SyncStatement]:
+    """The ordered statements of one sync transaction: nodes → stale-edge deletion → edges → pruning.
+
+    With ``preserve_unknown_vulnerability_edges`` the AFFECTED_BY and component USES edges of
+    dependencies whose new status is UNKNOWN survive (see the *_PRESERVE statements).
+    """
     rid = batches.repository_id
+    component_edges = CYPHER_DELETE_STALE_COMPONENT_EDGES_PRESERVE if preserve_unknown_vulnerability_edges else CYPHER_DELETE_STALE_COMPONENT_EDGES
+    dependency_edges = CYPHER_DELETE_STALE_DEPENDENCY_EDGES_PRESERVE if preserve_unknown_vulnerability_edges else CYPHER_DELETE_STALE_DEPENDENCY_EDGES
     return [
         SyncStatement("merge-repository", "node", CYPHER_MERGE_REPOSITORY,
                       {"repository_id": rid, "props": batches.repository}),
@@ -564,10 +589,8 @@ def sync_statements(batches: SyncBatches) -> list[SyncStatement]:
                       {"repository_id": rid, "rows": batches.vulnerabilities}),
         SyncStatement("delete-stale-repository-edges", "delete", CYPHER_DELETE_STALE_REPOSITORY_EDGES,
                       {"repository_id": rid}),
-        SyncStatement("delete-stale-component-edges", "delete", CYPHER_DELETE_STALE_COMPONENT_EDGES,
-                      {"repository_id": rid}),
-        SyncStatement("delete-stale-dependency-edges", "delete", CYPHER_DELETE_STALE_DEPENDENCY_EDGES,
-                      {"repository_id": rid}),
+        SyncStatement("delete-stale-component-edges", "delete", component_edges, {"repository_id": rid}),
+        SyncStatement("delete-stale-dependency-edges", "delete", dependency_edges, {"repository_id": rid}),
         SyncStatement("merge-contains", "relationship", CYPHER_MERGE_CONTAINS,
                       {"repository_id": rid, "rows": batches.contains}),
         SyncStatement("merge-repository-uses", "relationship", CYPHER_MERGE_REPOSITORY_USES,
@@ -638,13 +661,20 @@ class KnowledgeGraphService:
         relations: Sequence[DependencyRelation],
         dep_vulns: Mapping[Any, Sequence[Vulnerability]] | None,
         component_usage: Mapping[Any, Sequence[str]] | None,
+        *,
+        preserve_unknown_vulnerability_edges: bool = False,
     ) -> GraphSyncResult:
-        """Write one analysis into the graph (one transaction, UNWIND batches). Never raises."""
+        """Write one analysis into the graph (one transaction, UNWIND batches). Never raises.
+
+        ``preserve_unknown_vulnerability_edges`` is used when the vulnerability check could
+        not run for some or all dependencies: their previously known AFFECTED_BY / component
+        USES edges are kept instead of being deleted (audit finding F-03).
+        """
         if not self.client.available():
             return self._unavailable_result()
 
         batches = build_sync_batches(repository, components, dependencies, relations, dep_vulns, component_usage)
-        statements = sync_statements(batches)
+        statements = sync_statements(batches, preserve_unknown_vulnerability_edges=preserve_unknown_vulnerability_edges)
         try:
             if not self.ensure_constraints():
                 return self._unavailable_result()
@@ -670,7 +700,14 @@ class KnowledgeGraphService:
             stale_relationships_deleted=totals["delete"],
             nodes_pruned=totals["prune"],
             skipped=dict(batches.skipped),
+            preserved_unknown_edges=preserve_unknown_vulnerability_edges,
         )
+        if preserve_unknown_vulnerability_edges:
+            log.warning(
+                "Graph sync for repository %s ran in preserve mode: vulnerability data was unavailable for some "
+                "dependencies, their previously known AFFECTED_BY edges were kept",
+                batches.repository_id,
+            )
         log.info(
             "Graph synced for repository %s: %d nodes (%d components, %d dependencies, %d vulnerabilities), "
             "%d relationships; %d stale relationships removed, %d orphan nodes pruned",
