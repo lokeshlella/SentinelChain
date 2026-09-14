@@ -115,8 +115,18 @@ Nothing is ever merged automatically.
 
 ## 8. Demonstrating the real GitHub PR
 
+A ready-made copy of the demo project lives at https://github.com/lokeshlella/sentinel-chain-demo;
+the draft PR that Sentinel Chain opened against it on 2026-09-14 is
+https://github.com/lokeshlella/sentinel-chain-demo/pull/1 (branch
+`sentinel-chain/pypi-requests-2.33.0`, one-line change in `requirements.txt`, committed as
+*Sentinel Chain*, body identical in structure to `docs/EXAMPLE_PR_DESCRIPTION.md`).
+
+To reproduce it against your own repository:
+
 1. Create an empty repository under your GitHub account and push `examples/demo-project` to it.
-2. Put a token with `contents:write` + `pull_requests:write` (fine-grained) or `repo`
-   (classic) into `.env` as `GITHUB_TOKEN`, restart the backend.
+2. Provide a token with `contents:write` + `pull_requests:write` (fine-grained) or `repo`
+   (classic) as `GITHUB_TOKEN` — in `.env`, or only in the backend's environment
+   (`GITHUB_TOKEN="$(gh auth token)" uvicorn app.main:app`), which keeps it off disk.
 3. Register the repository by URL, analyse, remediate, validate, then create the PR — the
-   Pull Request page shows the GitHub URL of the draft PR.
+   Pull Request page shows the GitHub URL of the draft PR. The token is used only for the
+   clone and the one-off push URL; it is never written to `.git/config` or the logs.

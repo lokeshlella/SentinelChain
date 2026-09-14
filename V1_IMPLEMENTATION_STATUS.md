@@ -28,11 +28,11 @@ tests + 20 integration tests, all passing._
 | Modification in a temporary workspace | ✅ | `workspace/remediations/<id>`, unified diff stored |
 | Docker validation | ✅ | isolated container, install + tests + OSV re-scan; `PASS/FAIL/SKIPPED/UNKNOWN` |
 | Evidence report | ✅ | 10 sections, JSON + Markdown, reproducible from PostgreSQL (`docs/EXAMPLE_EVIDENCE_REPORT.md`) |
-| Draft PR when credentials exist | ✅ (code path tested with fakes and a real temporary git repo; live push requires a token) | `docs/EXAMPLE_PR_DESCRIPTION.md`; manual instructions without a token |
+| Draft PR when credentials exist | ✅ | live: https://github.com/lokeshlella/sentinel-chain-demo/pull/1 (draft, branch `sentinel-chain/pypi-requests-2.33.0`, +1/−1 in `requirements.txt`, committed as *Sentinel Chain*); manual instructions without a token (`docs/EXAMPLE_PR_DESCRIPTION.md`) |
 | Frontend displays the workflow | ✅ | Dashboard, Repository, Analysis, Finding, Remediation, Validation, Pull request(s), Health |
 | Tests pass | ✅ | `pytest -q` → 776 passed; `SENTINEL_INTEGRATION=1 pytest -m integration` → 20 passed |
 | README with exact setup | ✅ | `README.md`, `docs/DEMO.md` |
-| One complete end-to-end demo | ✅ | analysis 2 min 17 s, remediation 12 s, validation 4.8 s, report, PR record |
+| One complete end-to-end demo | ✅ | local path and GitHub URL: analysis ≈2 min, remediation 12 s, validation ≈5 s, report, real draft PR |
 
 ## Implemented features
 
