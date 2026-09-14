@@ -22,6 +22,7 @@ from app.core.logging import get_stage_logger
 from app.models.enums import SourceType
 from app.services.repository.base import FetchedRepository, RepositoryProvider, RepositorySource
 from app.services.repository.github_provider import parse_github_remote
+from app.services.repository.git_safety import harden_git_dir
 from app.services.repository.ignore import copytree_ignore
 
 logger = get_stage_logger("Repository")
@@ -127,6 +128,8 @@ class LocalRepositoryProvider(RepositoryProvider):
             raise RepositoryError(f"Could not copy {src} into the workspace: {exc}") from exc
         if not destination.is_dir():
             raise RepositoryError(f"Could not copy {src} into the workspace: destination missing after copy")
+        # A local .git is untrusted data: drop hooks, sanitise config, sever pointers to other repos.
+        warnings.extend(harden_git_dir(destination))
 
         fetched = FetchedRepository(
             name=self._name_for(src),

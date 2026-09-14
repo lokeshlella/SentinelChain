@@ -1,61 +1,30 @@
 """An in-memory stand-in for the docker SDK client used by the sandbox unit tests.
 
-Records every ``containers.create`` call (image + keyword arguments), the archives
-streamed in with ``put_archive`` and the lifecycle calls (start / wait / kill / remove),
-and answers ``logs`` / ``get_archive`` with canned data.
+The sandbox runs every step as ``container.exec_run(["sh", "-c", cmd])``; the fake answers
+each exec from ``exec_results`` (keyed by step name — "build" / "tests" — matched on the
+command text) and can simulate a step that hangs until the container is killed.
+Records every ``containers.create`` call (image + keyword arguments), the archives streamed
+in with ``put_archive``, every exec and the lifecycle calls (start / kill / remove).
 """
 
 from __future__ import annotations
 
 import io
 import tarfile
+import threading
+from collections import namedtuple
 from typing import Any
 
 import docker.errors
-import requests
 
-PASSING_PYTHON_LOGS = """::step build start 1700000000
-Collecting requests==2.33.0 (from -r requirements.txt (line 1))
-  Downloading requests-2.33.0-py3-none-any.whl.metadata (5.1 kB)
-Installing collected packages: requests
-Successfully installed requests-2.33.0
-WARNING: Running pip as the 'root' user can result in broken permissions.
-::step build end 0 1700000012
-::step tests start 1700000012
-.................                                                        [100%]
-17 passed in 0.10s
-::step tests end 0 1700000015
-"""
+ExecResult = namedtuple("ExecResult", ["exit_code", "output"])
 
-FAILING_BUILD_LOGS = """::step build start 1700000000
-ERROR: Could not find a version that satisfies the requirement requests==99.0.0 (from versions: 2.30.0, 2.31.0)
-ERROR: No matching distribution found for requests==99.0.0
-::step build end 1 1700000004
-::step tests skipped build failed
-"""
-
-FAILING_TESTS_LOGS = """::step build start 1700000000
-Successfully installed requests-2.33.0
-::step build end 0 1700000010
-::step tests start 1700000010
-F.
-FAILED tests/test_client.py::test_get - AssertionError
-1 failed, 1 passed in 0.20s
-::step tests end 1 1700000013
-"""
-
-SKIPPED_TESTS_LOGS = """::step build start 1700000000
-added 1 package in 2s
-::step build end 0 1700000002
-::step tests skipped package.json has no test script
-"""
-
-TIMEOUT_DURING_TESTS_LOGS = """::step build start 1700000000
-Successfully installed requests-2.33.0
-::step build end 0 1700000010
-::step tests start 1700000010
-tests/test_slow.py .
-"""
+# Realistic outputs for the two steps.
+PIP_INSTALL_OK = b"Collecting requests==2.33.0\n  Downloading requests-2.33.0-py3-none-any.whl (65 kB)\nSuccessfully installed requests-2.33.0\n"
+PIP_INSTALL_FAIL = b"ERROR: Could not find a version that satisfies the requirement requests==99.0.0\nERROR: No matching distribution found for requests==99.0.0\n"
+PYTEST_OK = b".................                                                        [100%]\n17 passed in 0.10s\n"
+PYTEST_FAIL = b"F.\nFAILED tests/test_client.py::test_get - AssertionError\n1 failed, 1 passed in 0.20s\n"
+NPM_INSTALL_OK = b"added 1 package in 2s\n"
 
 
 def tar_bytes(files: dict[str, bytes]) -> bytes:
@@ -83,7 +52,8 @@ class FakeContainer:
         self.started = False
         self.killed = False
         self.removed: dict[str, Any] | None = None
-        self.wait_calls: list[int | None] = []
+        self.execs: list[dict[str, Any]] = []
+        self._killed_event = threading.Event()
 
     def put_archive(self, path: str, data: bytes) -> bool:
         self.archives.append((path, data))
@@ -92,17 +62,21 @@ class FakeContainer:
     def start(self) -> None:
         self.started = True
 
-    def wait(self, timeout: int | None = None) -> dict[str, Any]:
-        self.wait_calls.append(timeout)
-        if self.client.wait_timeout:
-            raise requests.exceptions.ConnectionError("UnixHTTPConnectionPool: Read timed out.")
-        return {"StatusCode": 0}
+    def exec_run(self, cmd, **kwargs) -> ExecResult:
+        self.execs.append({"cmd": list(cmd), **kwargs})
+        step = self.client.step_for(cmd)
+        if step in self.client.hang_on:
+            # Behave like a real exec: block until the container is killed, then report the kill.
+            self._killed_event.wait()
+            return ExecResult(137, self.client.hang_output)
+        if self.client.exec_error is not None:
+            raise self.client.exec_error
+        exit_code, output = self.client.exec_results.get(step, (0, b""))
+        return ExecResult(exit_code, output)
 
     def kill(self) -> None:
         self.killed = True
-
-    def logs(self, stdout: bool = True, stderr: bool = True) -> bytes:
-        return self.client.logs
+        self._killed_event.set()
 
     def get_archive(self, path: str):
         for name, content in self.client.archive_files.items():
@@ -112,6 +86,7 @@ class FakeContainer:
 
     def remove(self, force: bool = False) -> None:
         self.removed = {"force": force}
+        self._killed_event.set()
 
 
 class FakeContainers:
@@ -144,24 +119,36 @@ class FakeImages:
 
 
 class FakeDockerClient:
+    """``exec_results``: {"build": (exit_code, output_bytes), "tests": (...)}; ``hang_on``: steps that block until killed."""
+
     def __init__(
         self,
         *,
-        logs: str | bytes = PASSING_PYTHON_LOGS,
-        wait_timeout: bool = False,
+        exec_results: dict[str, tuple[int | None, bytes]] | None = None,
+        hang_on: set[str] | frozenset[str] = frozenset(),
+        hang_output: bytes = b"",
+        exec_error: Exception | None = None,
         images_present: tuple[str, ...] = ("python:3.12-slim", "node:20-slim"),
         pull_error: Exception | None = None,
         create_error: Exception | None = None,
         archive_files: dict[str, bytes] | None = None,
         ping_error: Exception | None = None,
     ) -> None:
-        self.logs = logs.encode() if isinstance(logs, str) else logs
-        self.wait_timeout = wait_timeout
+        self.exec_results = exec_results if exec_results is not None else {"build": (0, PIP_INSTALL_OK), "tests": (0, PYTEST_OK)}
+        self.hang_on = set(hang_on)
+        self.hang_output = hang_output
+        self.exec_error = exec_error
         self.create_error = create_error
         self.archive_files = archive_files or {}
         self.ping_error = ping_error
         self.images = FakeImages(set(images_present), pull_error)
         self.containers = FakeContainers(self)
+
+    @staticmethod
+    def step_for(cmd) -> str:
+        text = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+        is_build = ("pip install" in text and " -r " in text) or "npm install" in text
+        return "build" if is_build else "tests"
 
     def ping(self) -> bool:
         if self.ping_error is not None:
@@ -169,7 +156,7 @@ class FakeDockerClient:
         return True
 
     def version(self) -> dict[str, Any]:
-        return {"Version": "fake-1.0"}
+        return {"Version": "fake-29.0"}
 
     @property
     def last_container(self) -> FakeContainer:
