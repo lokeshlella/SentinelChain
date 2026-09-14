@@ -109,7 +109,8 @@ Nothing is ever merged automatically.
 | `https://github.com/octocat/Hello-World` (no dependency files) | clone succeeds; analysis `FAILED` with *No supported dependency files found…* |
 | `https://github.com/pallets/flask` | real project: 21 dependencies from `examples/celery/requirements.txt`, 4 vulnerable (pyproject.toml is not parsed in V1) |
 | Stop Ollama | analysis completes; AI stage `UNAVAILABLE`, findings keep their provisional severity-based risk; remediation uses the deterministic candidate |
-| `OSV_API_URL=http://127.0.0.1:9` | dependencies `UNKNOWN` with *Vulnerability check unavailable* — never SAFE |
+| `OSV_API_URL=http://127.0.0.1:9` | dependencies `UNKNOWN` with *Vulnerability check unavailable* — never SAFE; the knowledge graph keeps its last known vulnerability edges (stage `PARTIAL`) |
+| Stop PostgreSQL | data endpoints answer `503 DatabaseUnavailable` with a plain message; `/api/health` keeps answering |
 | Stop Neo4j | analysis completes; knowledge-graph stage `UNAVAILABLE` |
 | Stop Docker | validation `FAILED` with build/tests `UNKNOWN` and a clear Docker error |
 

@@ -85,11 +85,17 @@ class FakeGraphService:
     def available(self) -> bool:
         return self._available
 
-    def sync_analysis(self, repository, components, dependencies, relations, dep_vulns, component_usage):
+    def sync_analysis(self, repository, components, dependencies, relations, dep_vulns, component_usage, *, preserve_unknown_vulnerability_edges=False):
         if not self._available:
             return GraphSyncResult(available=False, error=None)
-        self.synced.append({"dependencies": len(dependencies), "vulnerable": len(dep_vulns), "usage": dict(component_usage)})
-        return GraphSyncResult(available=True, nodes_written=len(dependencies) + len(components) + 1, relationships_written=len(dependencies))
+        self.synced.append({
+            "dependencies": len(dependencies), "vulnerable": len(dep_vulns), "usage": dict(component_usage),
+            "preserve": preserve_unknown_vulnerability_edges,
+        })
+        return GraphSyncResult(
+            available=True, nodes_written=len(dependencies) + len(components) + 1, relationships_written=len(dependencies),
+            preserved_unknown_edges=preserve_unknown_vulnerability_edges,
+        )
 
     def dependency_context(self, dep) -> GraphContext:
         if not self._available:

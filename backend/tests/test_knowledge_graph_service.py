@@ -297,7 +297,7 @@ def test_sync_result_to_dict(fixture):
     assert payload["nodes_written"] == 7
     assert set(payload) == {
         "available", "nodes_written", "relationships_written", "error",
-        "stale_relationships_deleted", "nodes_pruned", "skipped",
+        "stale_relationships_deleted", "nodes_pruned", "skipped", "preserved_unknown_edges",
     }
 
 
@@ -687,3 +687,28 @@ def test_transient_dependency_objects_work_without_session():
     rows = KnowledgeGraphService(client=fake).components_using_dependency(dep)
     assert rows[0]["path"] == "."
     assert fake.calls[0].params == {"repository_id": 9, "ecosystem": "npm", "name": "lodash", "version": "4.17.20"}
+
+
+# ---------------------------------------------------------------- audit F-03: preserve mode
+
+
+def test_sync_statements_preserve_mode_keeps_unknown_dependency_edges():
+    from app.services.knowledge_graph.service import (
+        CYPHER_DELETE_STALE_COMPONENT_EDGES_PRESERVE,
+        CYPHER_DELETE_STALE_DEPENDENCY_EDGES,
+        CYPHER_DELETE_STALE_DEPENDENCY_EDGES_PRESERVE,
+        SyncBatches,
+        sync_statements,
+    )
+
+    batches = SyncBatches(repository_id=1, repository={"name": "r"})
+    normal = {s.tag: s.cypher for s in sync_statements(batches)}
+    preserve = {s.tag: s.cypher for s in sync_statements(batches, preserve_unknown_vulnerability_edges=True)}
+    assert normal["delete-stale-dependency-edges"] == CYPHER_DELETE_STALE_DEPENDENCY_EDGES
+    assert preserve["delete-stale-dependency-edges"] == CYPHER_DELETE_STALE_DEPENDENCY_EDGES_PRESERVE
+    assert preserve["delete-stale-component-edges"] == CYPHER_DELETE_STALE_COMPONENT_EDGES_PRESERVE
+    # DEPENDS_ON is always refreshed; AFFECTED_BY only for dependencies that were actually checked
+    assert "type(rel) = 'DEPENDS_ON' OR coalesce(d.status, '') <> 'UNKNOWN'" in preserve["delete-stale-dependency-edges"]
+    # the order of operations is unchanged: nodes are merged (with the new status) before the deletion runs
+    names = [s.tag for s in sync_statements(batches, preserve_unknown_vulnerability_edges=True)]
+    assert names.index("merge-dependencies") < names.index("delete-stale-dependency-edges") < names.index("merge-affected-by")

@@ -16,6 +16,7 @@ All errors share one shape:
 | 409 | `ConflictError` | duplicate repository, analysis already running, PR on a failed validation |
 | 422 | `UnsupportedProjectError` / request validation | no supported dependency files, malformed body |
 | 502 | `ExternalServiceError` | an external service failed in a way that blocks the request |
+| 503 | `DatabaseUnavailable` | PostgreSQL cannot be reached (`Retry-After: 5`); `/health` still answers |
 
 Long-running work (analysis, sandbox validation) is started with `202 Accepted` and polled
 through `GET` until `status` is `COMPLETED` or `FAILED`.
