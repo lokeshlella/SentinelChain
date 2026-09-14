@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>weather-notes {{ version }}</title>
+</head>
+<body>
+  <h1>weather-notes</h1>
+  <p>Demo application for Sentinel Chain (version {{ version }}).</p>
+  <h2>Notes ({{ notes | length }})</h2>
+  {% if notes %}
+  <ul>
+    {% for note in notes %}
+    <li id="note-{{ note.id }}">{{ note.text }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No notes yet. POST JSON to <code>/api/notes</code> to add one.</p>
+  {% endif %}
+  <p><a href="/weather">Current weather (JSON)</a></p>
+</body>
+</html>

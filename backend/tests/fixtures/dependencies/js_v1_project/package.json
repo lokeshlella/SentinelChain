@@ -1,0 +1,13 @@
+{
+  "name": "sentinel-fixture-v1",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "debug": "^2.6.9",
+    "send": "0.18.0",
+    "git-dep": "github:example/git-dep"
+  },
+  "devDependencies": {
+    "ms": "^2.1.3"
+  }
+}

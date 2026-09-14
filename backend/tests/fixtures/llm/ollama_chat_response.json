@@ -1,0 +1,17 @@
+{
+    "model": "llama3.2:3b",
+    "created_at": "2026-09-13T09:25:18.372509Z",
+    "message": {
+        "role": "assistant",
+        "content": "{\"summary\": \"HTTP Client for Python\", \"confidence\": 0.9}"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 9486746209,
+    "load_duration": 8545720375,
+    "prompt_eval_count": 54,
+    "prompt_eval_cached_count": 0,
+    "prompt_eval_duration": 431971000,
+    "eval_count": 18,
+    "eval_duration": 474850000
+}

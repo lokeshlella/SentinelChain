@@ -1,0 +1,9 @@
+{
+  "name": "@mono/app",
+  "version": "1.0.0",
+  "dependencies": {
+    "@mono/lib": "workspace:*",
+    "lodash": "^4.17.21",
+    "ms": "^2.1.3"
+  }
+}

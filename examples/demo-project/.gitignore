@@ -1,0 +1,7 @@
+# Sentinel Chain demo project
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/

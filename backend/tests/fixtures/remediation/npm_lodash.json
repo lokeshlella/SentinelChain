@@ -1,0 +1,1071 @@
+{
+ "_fixture_note": "Trimmed copy of a real GET https://registry.npmjs.org/lodash response (fetched 2026-09-14). Only name, dist-tags, versions (name/version/dist/deprecated) and time are kept.",
+ "_id": "lodash",
+ "name": "lodash",
+ "description": "Lodash modular utilities.",
+ "dist-tags": {
+  "latest": "4.18.1"
+ },
+ "versions": {
+  "0.1.0": {
+   "name": "lodash",
+   "version": "0.1.0",
+   "dist": {
+    "shasum": "392617f69a947e40cec7848d85fcc3dd29d74bc5",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.1.0.tgz"
+   }
+  },
+  "0.2.0": {
+   "name": "lodash",
+   "version": "0.2.0",
+   "dist": {
+    "shasum": "efaa16fb4614bdce9a7a9fdda487125d3fab38a2",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.2.0.tgz"
+   }
+  },
+  "0.2.1": {
+   "name": "lodash",
+   "version": "0.2.1",
+   "dist": {
+    "shasum": "fcdd734c401af6215d1ac511dc30e8003dde4607",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.2.1.tgz"
+   }
+  },
+  "0.2.2": {
+   "name": "lodash",
+   "version": "0.2.2",
+   "dist": {
+    "shasum": "d79277dafa86346a181dd924365215b126fdf2cb",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.2.2.tgz"
+   }
+  },
+  "0.3.0": {
+   "name": "lodash",
+   "version": "0.3.0",
+   "dist": {
+    "shasum": "e7db413e8b50d48834e86f82c52fd64f0a9e5d6e",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.3.0.tgz"
+   }
+  },
+  "0.3.1": {
+   "name": "lodash",
+   "version": "0.3.1",
+   "dist": {
+    "shasum": "4449723baa6d2ff0ab710fd5e4ea70e06ad5e319",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.3.1.tgz"
+   }
+  },
+  "0.3.2": {
+   "name": "lodash",
+   "version": "0.3.2",
+   "dist": {
+    "shasum": "b28474cacc670134c856b24ad4183ff20dec7b8e",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.3.2.tgz"
+   }
+  },
+  "0.4.0": {
+   "name": "lodash",
+   "version": "0.4.0",
+   "dist": {
+    "shasum": "9305c807119214f9d9d7728d1f3c86c3881431f5",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.4.0.tgz"
+   }
+  },
+  "0.4.1": {
+   "name": "lodash",
+   "version": "0.4.1",
+   "dist": {
+    "shasum": "56dda6e88d947361d53c075da64084be4b2b9907",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.4.1.tgz"
+   }
+  },
+  "0.4.2": {
+   "name": "lodash",
+   "version": "0.4.2",
+   "dist": {
+    "shasum": "e152362a0e7c5ef8c35894e58d99a520c822aed6",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.4.2.tgz"
+   }
+  },
+  "0.5.0-rc.1": {
+   "name": "lodash",
+   "version": "0.5.0-rc.1",
+   "dist": {
+    "shasum": "b3084c61e5515d86cf680aca01a5840c51e15e6a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.5.0-rc.1.tgz"
+   }
+  },
+  "0.5.0": {
+   "name": "lodash",
+   "version": "0.5.0",
+   "dist": {
+    "shasum": "37f7912579b92139e9b657f2e2b80ab5c8ca4643",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.5.0.tgz"
+   }
+  },
+  "0.5.1": {
+   "name": "lodash",
+   "version": "0.5.1",
+   "dist": {
+    "shasum": "70a60e7ae06c7a0838cf44b96dab9d8cc1454838",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.5.1.tgz"
+   }
+  },
+  "0.5.2": {
+   "name": "lodash",
+   "version": "0.5.2",
+   "dist": {
+    "shasum": "4c873f93bdddeaa07401a675f8e17ded5af9a827",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.5.2.tgz"
+   }
+  },
+  "0.6.0": {
+   "name": "lodash",
+   "version": "0.6.0",
+   "dist": {
+    "shasum": "78712a5c31fb040f4396e3c4d42884d4c75a3ecb",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.6.0.tgz"
+   }
+  },
+  "0.6.1": {
+   "name": "lodash",
+   "version": "0.6.1",
+   "dist": {
+    "shasum": "9b093d490fd4fc50091609a92f4bbb5d10396357",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.6.1.tgz"
+   }
+  },
+  "0.7.0": {
+   "name": "lodash",
+   "version": "0.7.0",
+   "dist": {
+    "shasum": "8d0649e1fcb58a546ae9cb9f86f61d442571ae83",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.7.0.tgz"
+   }
+  },
+  "0.8.0": {
+   "name": "lodash",
+   "version": "0.8.0",
+   "dist": {
+    "shasum": "9c66ca5f6a886087b1f980eef2a3991a98a22f7a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.8.0.tgz"
+   }
+  },
+  "0.8.1": {
+   "name": "lodash",
+   "version": "0.8.1",
+   "dist": {
+    "shasum": "e4948649217958a8413600fa3a63941cfb8f4bb6",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.8.1.tgz"
+   }
+  },
+  "0.8.2": {
+   "name": "lodash",
+   "version": "0.8.2",
+   "dist": {
+    "shasum": "4c59d6b23ce894412a13dab22304772d0cb11ae4",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.8.2.tgz"
+   }
+  },
+  "0.9.0": {
+   "name": "lodash",
+   "version": "0.9.0",
+   "dist": {
+    "shasum": "5647e17bc474a1903f4873616d5a2bc615d6620a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.9.0.tgz"
+   }
+  },
+  "0.9.1": {
+   "name": "lodash",
+   "version": "0.9.1",
+   "dist": {
+    "shasum": "9009df00e6e3166935312b3a3edfd9dff06e3562",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.9.1.tgz"
+   }
+  },
+  "0.9.2": {
+   "name": "lodash",
+   "version": "0.9.2",
+   "dist": {
+    "shasum": "8f3499c5245d346d682e5b0d3b40767e09f1a92c",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.9.2.tgz"
+   }
+  },
+  "0.10.0": {
+   "name": "lodash",
+   "version": "0.10.0",
+   "dist": {
+    "shasum": "5254bbc2c46c827f535a27d631fd4f2bff374ce7",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-0.10.0.tgz"
+   }
+  },
+  "1.0.0-rc.1": {
+   "name": "lodash",
+   "version": "1.0.0-rc.1",
+   "dist": {
+    "shasum": "4d25e7a3471e8c79f21a53bc9548ff4c3c751246",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.0.0-rc.1.tgz"
+   }
+  },
+  "1.0.0-rc.2": {
+   "name": "lodash",
+   "version": "1.0.0-rc.2",
+   "dist": {
+    "shasum": "58c819a059ca25d52c289f7a01b419a4f3b945e9",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.0.0-rc.2.tgz"
+   }
+  },
+  "1.0.0-rc.3": {
+   "name": "lodash",
+   "version": "1.0.0-rc.3",
+   "dist": {
+    "shasum": "807ec29d0b768c7bb1025a796b8dec137fb06957",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.0.0-rc.3.tgz"
+   }
+  },
+  "1.0.0": {
+   "name": "lodash",
+   "version": "1.0.0",
+   "dist": {
+    "shasum": "2535c2f7dcb6937cee8d2672c5f7138eee0df6a9",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.0.0.tgz"
+   }
+  },
+  "1.0.1": {
+   "name": "lodash",
+   "version": "1.0.1",
+   "dist": {
+    "shasum": "57945732498d92310e5bd4b1ff4f273a79e6c9fc",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.0.1.tgz"
+   }
+  },
+  "1.1.0": {
+   "name": "lodash",
+   "version": "1.1.0",
+   "dist": {
+    "shasum": "bd0bb7f858f6c09ae140f23869261e555bd6ec1d",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.1.0.tgz"
+   }
+  },
+  "1.1.1": {
+   "name": "lodash",
+   "version": "1.1.1",
+   "dist": {
+    "shasum": "41a2b2e9a00e64d6d1999f143ff6b0755f6bbb24",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.1.1.tgz"
+   }
+  },
+  "1.2.0": {
+   "name": "lodash",
+   "version": "1.2.0",
+   "dist": {
+    "shasum": "5f16a3318ab3bf680c7b41b5bb6327e9e1086ec4",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.2.0.tgz"
+   }
+  },
+  "1.2.1": {
+   "name": "lodash",
+   "version": "1.2.1",
+   "dist": {
+    "shasum": "ed47b16e46f06b2b40309b68e9163c17e93ea304",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.2.1.tgz"
+   }
+  },
+  "1.3.0": {
+   "name": "lodash",
+   "version": "1.3.0",
+   "dist": {
+    "shasum": "09f6f55bceac513ee5681665947630fa8ae7593f",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.3.0.tgz"
+   }
+  },
+  "1.3.1": {
+   "name": "lodash",
+   "version": "1.3.1",
+   "dist": {
+    "shasum": "a4663b53686b895ff074e2ba504dfb76a8e2b770",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.3.1.tgz"
+   }
+  },
+  "2.0.0": {
+   "name": "lodash",
+   "version": "2.0.0",
+   "dist": {
+    "shasum": "9dcf9e3fac04ad0a38c9e2db69c9fb7ce26dabc2",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.0.0.tgz"
+   }
+  },
+  "2.1.0": {
+   "name": "lodash",
+   "version": "2.1.0",
+   "dist": {
+    "shasum": "0637eaaa36a8a1cfc865c3adfb942189bfb0998d",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.1.0.tgz"
+   }
+  },
+  "2.2.0": {
+   "name": "lodash",
+   "version": "2.2.0",
+   "dist": {
+    "shasum": "6bd68cc1c37a3885c15211bbe1dce6d69f01e01d",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.2.0.tgz"
+   }
+  },
+  "2.2.1": {
+   "name": "lodash",
+   "version": "2.2.1",
+   "dist": {
+    "shasum": "ca935fd14ab3c0c872abacf198b9cda501440867",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.2.1.tgz"
+   }
+  },
+  "2.3.0": {
+   "name": "lodash",
+   "version": "2.3.0",
+   "dist": {
+    "shasum": "dfbdac99cf87a59a022c474730570d8716c267dd",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.3.0.tgz"
+   }
+  },
+  "2.4.0": {
+   "name": "lodash",
+   "version": "2.4.0",
+   "dist": {
+    "shasum": "55074982883381b6b7134b742a5900bbbdab6b09",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.4.0.tgz"
+   }
+  },
+  "2.4.1": {
+   "name": "lodash",
+   "version": "2.4.1",
+   "dist": {
+    "shasum": "5b7723034dda4d262e5a46fb2c58d7cc22f71420",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.4.1.tgz"
+   }
+  },
+  "3.0.0": {
+   "name": "lodash",
+   "version": "3.0.0",
+   "dist": {
+    "shasum": "493364b7183a37104d65255f38b0fe5869cbe0fd",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.0.0.tgz"
+   }
+  },
+  "3.0.1": {
+   "name": "lodash",
+   "version": "3.0.1",
+   "dist": {
+    "shasum": "14d49028a38bc740241d11e2ecd57ec06d73c19a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.0.1.tgz"
+   }
+  },
+  "3.1.0": {
+   "name": "lodash",
+   "version": "3.1.0",
+   "dist": {
+    "shasum": "d41b8b33530cb3be088853208ad30092d2c27961",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.1.0.tgz"
+   }
+  },
+  "3.2.0": {
+   "name": "lodash",
+   "version": "3.2.0",
+   "dist": {
+    "shasum": "4bf50a3243f9aeb0bac41a55d3d5990675a462fb",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.2.0.tgz"
+   }
+  },
+  "3.3.0": {
+   "name": "lodash",
+   "version": "3.3.0",
+   "dist": {
+    "shasum": "011ce52d01b14e60eaeea76acb9b8ba42c70581b",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.3.0.tgz"
+   }
+  },
+  "3.3.1": {
+   "name": "lodash",
+   "version": "3.3.1",
+   "dist": {
+    "shasum": "3b914d4a1bb27efcee076e0dfa58152018e2042e",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.3.1.tgz"
+   }
+  },
+  "3.4.0": {
+   "name": "lodash",
+   "version": "3.4.0",
+   "dist": {
+    "shasum": "7c39c1336faf5f96e6409f8355f26ea192f41821",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.4.0.tgz"
+   }
+  },
+  "3.5.0": {
+   "name": "lodash",
+   "version": "3.5.0",
+   "dist": {
+    "shasum": "19bb3f4d51278f0b8c818ed145c74ecf9fe40e6d",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.5.0.tgz"
+   }
+  },
+  "3.6.0": {
+   "name": "lodash",
+   "version": "3.6.0",
+   "dist": {
+    "shasum": "5266a8f49dd989be4f9f681b6f2a0c55285d0d9a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.6.0.tgz"
+   }
+  },
+  "1.0.2": {
+   "name": "lodash",
+   "version": "1.0.2",
+   "dist": {
+    "shasum": "8f57560c83b59fc270bd3d561b690043430e2551",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-1.0.2.tgz"
+   }
+  },
+  "3.7.0": {
+   "name": "lodash",
+   "version": "3.7.0",
+   "dist": {
+    "shasum": "3678bd8ab995057c07ade836ed2ef087da811d45",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.7.0.tgz"
+   }
+  },
+  "2.4.2": {
+   "name": "lodash",
+   "version": "2.4.2",
+   "dist": {
+    "shasum": "fadd834b9683073da179b3eae6d9c0d15053f73e",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-2.4.2.tgz"
+   }
+  },
+  "3.8.0": {
+   "name": "lodash",
+   "version": "3.8.0",
+   "dist": {
+    "shasum": "376eb98bdcd9382a9365c33c4cb8250de1325b91",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.8.0.tgz"
+   }
+  },
+  "3.9.0": {
+   "name": "lodash",
+   "version": "3.9.0",
+   "dist": {
+    "shasum": "5bf547f9fcce37f78678859ba11854dc75ffa21b",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.9.0.tgz"
+   }
+  },
+  "3.9.1": {
+   "name": "lodash",
+   "version": "3.9.1",
+   "dist": {
+    "shasum": "5102372ecaa2ccf71fec63b55b44642eeb77b59a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.9.1.tgz"
+   }
+  },
+  "3.9.2": {
+   "name": "lodash",
+   "version": "3.9.2",
+   "dist": {
+    "shasum": "e86b404e374a7787fd272be086991b7bed2ce06f",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.9.2.tgz"
+   }
+  },
+  "3.9.3": {
+   "name": "lodash",
+   "version": "3.9.3",
+   "dist": {
+    "shasum": "0159e86832feffc6d61d852b12a953b99496bd32",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.9.3.tgz"
+   }
+  },
+  "3.10.0": {
+   "name": "lodash",
+   "version": "3.10.0",
+   "dist": {
+    "shasum": "93d51c672828a4416a12af57220ba8a8737e2fbb",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.10.0.tgz"
+   }
+  },
+  "3.10.1": {
+   "name": "lodash",
+   "version": "3.10.1",
+   "dist": {
+    "shasum": "5bf45e8e49ba4189e17d482789dfd15bd140b7b6",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-3.10.1.tgz"
+   }
+  },
+  "4.0.0": {
+   "name": "lodash",
+   "version": "4.0.0",
+   "dist": {
+    "shasum": "9ac43844c595e28d30108b7ba583703395922dfc",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.0.0.tgz"
+   }
+  },
+  "4.0.1": {
+   "name": "lodash",
+   "version": "4.0.1",
+   "dist": {
+    "shasum": "cd8c902c9e03f2e69ce3e0e456d505ab89eb98f4",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.0.1.tgz"
+   }
+  },
+  "4.1.0": {
+   "name": "lodash",
+   "version": "4.1.0",
+   "dist": {
+    "shasum": "299894283de01a9eefbedff4c4b9b00a6a2e6e96",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.1.0.tgz"
+   }
+  },
+  "4.2.0": {
+   "name": "lodash",
+   "version": "4.2.0",
+   "dist": {
+    "shasum": "0506f4dad737c79cb2602ac11f8b74b7136464e8",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.2.0.tgz"
+   }
+  },
+  "4.2.1": {
+   "name": "lodash",
+   "version": "4.2.1",
+   "dist": {
+    "shasum": "171fdcfbbc30d689c544cd18c0529f56de6c1aa9",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.2.1.tgz"
+   }
+  },
+  "4.3.0": {
+   "name": "lodash",
+   "version": "4.3.0",
+   "dist": {
+    "shasum": "efd9c4a6ec53f3b05412429915c3e4824e4d25a4",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.3.0.tgz"
+   }
+  },
+  "4.4.0": {
+   "name": "lodash",
+   "version": "4.4.0",
+   "dist": {
+    "shasum": "bc5c6b741d04d53111b26cf1a2feab86c268cd7a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.4.0.tgz"
+   }
+  },
+  "4.5.0": {
+   "name": "lodash",
+   "version": "4.5.0",
+   "dist": {
+    "shasum": "2284aa06f5b136adbd954b903511b62fc39d1f59",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.5.0.tgz"
+   }
+  },
+  "4.5.1": {
+   "name": "lodash",
+   "version": "4.5.1",
+   "dist": {
+    "shasum": "80e8a074ca5f3893a6b1c10b2a636492d710c316",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.5.1.tgz"
+   }
+  },
+  "4.6.0": {
+   "name": "lodash",
+   "version": "4.6.0",
+   "dist": {
+    "shasum": "c6926922ed75379993f0212a4764c18a760a2198",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.6.0.tgz"
+   }
+  },
+  "4.6.1": {
+   "name": "lodash",
+   "version": "4.6.1",
+   "dist": {
+    "shasum": "df00c1164ad236b183cfc3887a5e8d38cc63cbbc",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.6.1.tgz"
+   }
+  },
+  "4.7.0": {
+   "name": "lodash",
+   "version": "4.7.0",
+   "dist": {
+    "shasum": "b8088876bdc290ca1f34f90350f7b5cb71810c05",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.7.0.tgz"
+   }
+  },
+  "4.8.0": {
+   "name": "lodash",
+   "version": "4.8.0",
+   "dist": {
+    "shasum": "297fb94a164c02e7eb8d37cde135be62456df446",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.8.0.tgz"
+   }
+  },
+  "4.8.1": {
+   "name": "lodash",
+   "version": "4.8.1",
+   "dist": {
+    "shasum": "97797b4684d238bad1a2d0a2e53108fe57e5f95f",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.8.1.tgz"
+   }
+  },
+  "4.8.2": {
+   "name": "lodash",
+   "version": "4.8.2",
+   "dist": {
+    "shasum": "478ad7ff648c3c71a2f6108e032c5c0cc40747df",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.8.2.tgz"
+   }
+  },
+  "4.9.0": {
+   "name": "lodash",
+   "version": "4.9.0",
+   "dist": {
+    "shasum": "4c20d742f03ce85dc700e0dd7ab9bcab85e6fc14",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.9.0.tgz"
+   }
+  },
+  "4.10.0": {
+   "name": "lodash",
+   "version": "4.10.0",
+   "dist": {
+    "shasum": "3d8f3ac7a5a904fdb01e2cfe1401879bf9652c6a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.10.0.tgz"
+   }
+  },
+  "4.11.0": {
+   "name": "lodash",
+   "version": "4.11.0",
+   "dist": {
+    "shasum": "428f7172a5e9a82e9a459b543816489810ecb8af",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.11.0.tgz"
+   }
+  },
+  "4.11.1": {
+   "name": "lodash",
+   "version": "4.11.1",
+   "dist": {
+    "shasum": "a32106eb8e2ec8e82c241611414773c9df15f8bc",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.11.1.tgz"
+   }
+  },
+  "4.11.2": {
+   "name": "lodash",
+   "version": "4.11.2",
+   "dist": {
+    "shasum": "d6b4338b110a58e21dae5cebcfdbbfd2bc4cdb3b",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.11.2.tgz"
+   }
+  },
+  "4.12.0": {
+   "name": "lodash",
+   "version": "4.12.0",
+   "dist": {
+    "shasum": "2bd6dc46a040f59e686c972ed21d93dc59053258",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.12.0.tgz"
+   }
+  },
+  "4.13.0": {
+   "name": "lodash",
+   "version": "4.13.0",
+   "dist": {
+    "shasum": "6172ad9cfaa5db21268b23b6da6c3a42442aab65",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.13.0.tgz"
+   }
+  },
+  "4.13.1": {
+   "name": "lodash",
+   "version": "4.13.1",
+   "dist": {
+    "shasum": "83e4b10913f48496d4d16fec4a560af2ee744b68",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.13.1.tgz"
+   }
+  },
+  "4.14.0": {
+   "name": "lodash",
+   "version": "4.14.0",
+   "dist": {
+    "shasum": "b742d6a80b5ee87e7c1a35c143c5b19bd966c10b",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.14.0.tgz"
+   }
+  },
+  "4.14.1": {
+   "name": "lodash",
+   "version": "4.14.1",
+   "dist": {
+    "shasum": "5b5d0a516ad3d46e12012d7f59ad66a5659bf408",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.14.1.tgz"
+   }
+  },
+  "4.14.2": {
+   "name": "lodash",
+   "version": "4.14.2",
+   "dist": {
+    "shasum": "bbccce6373a400fbfd0a8c67ca42f6d1ef416432",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.14.2.tgz"
+   }
+  },
+  "4.15.0": {
+   "name": "lodash",
+   "version": "4.15.0",
+   "dist": {
+    "shasum": "3162391d8f0140aa22cf8f6b3c34d6b7f63d3aa9",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.15.0.tgz"
+   }
+  },
+  "4.16.0": {
+   "name": "lodash",
+   "version": "4.16.0",
+   "dist": {
+    "shasum": "834cb785057157032242beaf101bb3d99e55d0d8",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.16.0.tgz"
+   }
+  },
+  "4.16.1": {
+   "name": "lodash",
+   "version": "4.16.1",
+   "dist": {
+    "shasum": "75e15fcfe2721adbd6a7c5985f855288a03fc36d",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.16.1.tgz"
+   }
+  },
+  "4.16.2": {
+   "name": "lodash",
+   "version": "4.16.2",
+   "dist": {
+    "shasum": "3e626db827048a699281a8a125226326cfc0e652",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.16.2.tgz"
+   }
+  },
+  "4.16.3": {
+   "name": "lodash",
+   "version": "4.16.3",
+   "dist": {
+    "shasum": "0ba761439529127c7a38c439114ca153efa999a2",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.16.3.tgz"
+   }
+  },
+  "4.16.4": {
+   "name": "lodash",
+   "version": "4.16.4",
+   "dist": {
+    "shasum": "01ce306b9bad1319f2a5528674f88297aeb70127",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.16.4.tgz"
+   }
+  },
+  "4.16.5": {
+   "name": "lodash",
+   "version": "4.16.5",
+   "dist": {
+    "shasum": "77d88feac548009b1a5c4ca7b49ac431ce346ae8",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.16.5.tgz"
+   }
+  },
+  "4.16.6": {
+   "name": "lodash",
+   "version": "4.16.6",
+   "dist": {
+    "shasum": "d22c9ac660288f3843e16ba7d2b5d06cca27d777",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.16.6.tgz"
+   }
+  },
+  "4.17.0": {
+   "name": "lodash",
+   "version": "4.17.0",
+   "dist": {
+    "shasum": "93f4466e5ab73e5a1f1216c34eea11535f0a8df5",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.0.tgz"
+   }
+  },
+  "4.17.1": {
+   "name": "lodash",
+   "version": "4.17.1",
+   "dist": {
+    "shasum": "e75eaf17a34730c6491d9956f4d81f3a044f01bf",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.1.tgz"
+   }
+  },
+  "4.17.2": {
+   "name": "lodash",
+   "version": "4.17.2",
+   "dist": {
+    "shasum": "34a3055babe04ce42467b607d700072c7ff6bf42",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.2.tgz"
+   }
+  },
+  "4.17.3": {
+   "name": "lodash",
+   "version": "4.17.3",
+   "dist": {
+    "shasum": "557ed7d2a9438cac5fd5a43043ca60cb455e01f7",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.3.tgz"
+   }
+  },
+  "4.17.4": {
+   "name": "lodash",
+   "version": "4.17.4",
+   "dist": {
+    "shasum": "78203a4d1c328ae1d86dca6460e369b57f4055ae",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.4.tgz"
+   }
+  },
+  "4.17.5": {
+   "name": "lodash",
+   "version": "4.17.5",
+   "dist": {
+    "shasum": "99a92d65c0272debe8c96b6057bc8fbfa3bed511",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.5.tgz"
+   }
+  },
+  "4.17.9": {
+   "name": "lodash",
+   "version": "4.17.9",
+   "dist": {
+    "shasum": "9c056579af0bdbb4322e23c836df13ef2b271cb7",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.9.tgz"
+   }
+  },
+  "4.17.10": {
+   "name": "lodash",
+   "version": "4.17.10",
+   "dist": {
+    "shasum": "1b7793cf7259ea38fb3661d4d38b3260af8ae4e7",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.10.tgz"
+   }
+  },
+  "4.17.11": {
+   "name": "lodash",
+   "version": "4.17.11",
+   "dist": {
+    "shasum": "b39ea6229ef607ecd89e2c8df12536891cac9b8d",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.11.tgz"
+   }
+  },
+  "4.17.12": {
+   "name": "lodash",
+   "version": "4.17.12",
+   "dist": {
+    "shasum": "a712c74fdc31f7ecb20fe44f157d802d208097ef",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.12.tgz"
+   }
+  },
+  "4.17.13": {
+   "name": "lodash",
+   "version": "4.17.13",
+   "dist": {
+    "shasum": "0bdc3a6adc873d2f4e0c4bac285df91b64fc7b93",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.13.tgz"
+   }
+  },
+  "4.17.14": {
+   "name": "lodash",
+   "version": "4.17.14",
+   "dist": {
+    "shasum": "9ce487ae66c96254fe20b599f21b6816028078ba",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.14.tgz"
+   }
+  },
+  "4.17.15": {
+   "name": "lodash",
+   "version": "4.17.15",
+   "dist": {
+    "shasum": "b447f6670a0455bbfeedd11392eff330ea097548",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.15.tgz"
+   }
+  },
+  "4.17.16": {
+   "name": "lodash",
+   "version": "4.17.16",
+   "dist": {
+    "shasum": "34fa1571037ea4b35b2726932961eafedad3058e",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.16.tgz"
+   }
+  },
+  "4.17.17": {
+   "name": "lodash",
+   "version": "4.17.17",
+   "dist": {
+    "shasum": "d9018b3acc57a95c9dcf4a45c6b63b877b6c2d45",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.17.tgz"
+   }
+  },
+  "4.17.18": {
+   "name": "lodash",
+   "version": "4.17.18",
+   "dist": {
+    "shasum": "5c5f072c5c02f386378dd3f6325b529376210427",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.18.tgz"
+   }
+  },
+  "4.17.19": {
+   "name": "lodash",
+   "version": "4.17.19",
+   "dist": {
+    "shasum": "e48ddedbe30b3321783c5b4301fbd353bc1e4a4b",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.19.tgz"
+   }
+  },
+  "4.17.20": {
+   "name": "lodash",
+   "version": "4.17.20",
+   "dist": {
+    "shasum": "b44a9b6297bcb698f1c51a3545a2b3b368d59c52",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.20.tgz"
+   }
+  },
+  "4.17.21": {
+   "name": "lodash",
+   "version": "4.17.21",
+   "dist": {
+    "shasum": "679591c564c3bffaae8454cf0b3df370c3d6911c",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+   }
+  },
+  "4.17.23": {
+   "name": "lodash",
+   "version": "4.17.23",
+   "dist": {
+    "shasum": "f113b0378386103be4f6893388c73d0bde7f2c5a",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.17.23.tgz"
+   }
+  },
+  "4.18.0": {
+   "name": "lodash",
+   "version": "4.18.0",
+   "dist": {
+    "shasum": "dfd726f07ab2e39dd763de28fcf66e395c03e440",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.18.0.tgz"
+   },
+   "deprecated": "Bad release. Please use lodash@4.17.21 instead."
+  },
+  "4.18.1": {
+   "name": "lodash",
+   "version": "4.18.1",
+   "dist": {
+    "shasum": "ff2b66c1f6326d59513de2407bf881439812771c",
+    "tarball": "https://registry.npmjs.org/lodash/-/lodash-4.18.1.tgz"
+   }
+  }
+ },
+ "time": {
+  "created": "2012-04-23T16:37:11.912Z",
+  "modified": "2026-09-13T01:02:22.596Z",
+  "0.1.0": "2012-04-23T16:37:12.603Z",
+  "0.2.0": "2012-05-22T04:06:24.044Z",
+  "0.2.1": "2012-05-24T21:53:08.449Z",
+  "0.2.2": "2012-05-30T07:56:26.644Z",
+  "0.3.0": "2012-06-06T20:01:49.669Z",
+  "0.3.1": "2012-06-11T04:12:51.792Z",
+  "0.3.2": "2012-06-14T19:19:49.846Z",
+  "0.4.0": "2012-07-11T17:14:20.142Z",
+  "0.4.1": "2012-07-12T04:56:31.883Z",
+  "0.4.2": "2012-07-16T18:49:41.162Z",
+  "0.5.0-rc.1": "2012-08-07T15:08:27.331Z",
+  "0.5.0": "2012-08-17T20:13:07.054Z",
+  "0.5.1": "2012-08-18T20:15:42.131Z",
+  "0.5.2": "2012-08-22T16:22:03.757Z",
+  "0.6.0": "2012-08-28T16:01:09.459Z",
+  "0.6.1": "2012-08-30T08:01:38.808Z",
+  "0.7.0": "2012-09-11T16:24:07.425Z",
+  "0.8.0": "2012-10-02T06:49:38.116Z",
+  "0.8.1": "2012-10-04T08:53:29.540Z",
+  "0.8.2": "2012-10-10T07:51:31.600Z",
+  "0.9.0": "2013-08-31T04:46:20.474Z",
+  "0.9.1": "2013-08-31T04:49:15.754Z",
+  "0.9.2": "2013-08-31T04:52:21.307Z",
+  "0.10.0": "2013-08-31T04:56:09.871Z",
+  "1.0.0-rc.1": "2013-08-31T05:00:28.060Z",
+  "1.0.0-rc.2": "2013-08-31T05:05:31.147Z",
+  "1.0.0-rc.3": "2013-08-31T05:08:51.705Z",
+  "1.0.0": "2013-08-31T05:11:42.645Z",
+  "1.0.1": "2013-08-31T05:16:47.715Z",
+  "1.1.0": "2013-09-04T14:23:45.728Z",
+  "1.1.1": "2013-09-04T14:24:07.907Z",
+  "1.2.0": "2013-09-04T14:24:34.140Z",
+  "1.2.1": "2013-09-04T14:24:58.381Z",
+  "1.3.0": "2013-09-04T14:25:19.793Z",
+  "1.3.1": "2013-09-04T14:25:40.429Z",
+  "2.0.0": "2013-09-14T04:22:28.159Z",
+  "2.1.0": "2013-09-23T05:57:42.595Z",
+  "2.2.0": "2013-09-29T21:52:47.266Z",
+  "2.2.1": "2013-10-03T18:29:30.163Z",
+  "2.3.0": "2013-11-11T17:30:27.058Z",
+  "2.4.0": "2013-11-26T19:40:30.164Z",
+  "2.4.1": "2013-12-03T16:51:12.879Z",
+  "3.0.0": "2015-01-26T15:09:31.198Z",
+  "3.0.1": "2015-01-30T09:33:51.621Z",
+  "3.1.0": "2015-02-03T16:53:35.795Z",
+  "3.2.0": "2015-02-12T17:01:18.403Z",
+  "3.3.0": "2015-02-20T17:08:28.864Z",
+  "3.3.1": "2015-02-24T16:02:47.458Z",
+  "3.4.0": "2015-03-06T16:44:06.018Z",
+  "3.5.0": "2015-03-09T05:01:51.264Z",
+  "3.6.0": "2015-03-25T15:36:29.983Z",
+  "1.0.2": "2015-03-30T15:58:01.337Z",
+  "3.7.0": "2015-04-16T15:47:35.770Z",
+  "2.4.2": "2015-04-26T21:04:49.443Z",
+  "3.8.0": "2015-05-01T15:45:44.760Z",
+  "3.9.0": "2015-05-19T18:26:55.450Z",
+  "3.9.1": "2015-05-19T21:00:20.625Z",
+  "3.9.2": "2015-05-24T20:57:57.973Z",
+  "3.9.3": "2015-05-26T01:47:44.058Z",
+  "3.10.0": "2015-06-30T15:13:28.602Z",
+  "3.10.1": "2015-08-04T06:05:06.887Z",
+  "4.0.0": "2016-01-12T23:13:20.539Z",
+  "4.0.1": "2016-01-25T16:06:17.924Z",
+  "4.1.0": "2016-01-29T16:33:24.543Z",
+  "4.2.0": "2016-02-02T08:50:17.287Z",
+  "4.2.1": "2016-02-03T16:00:16.046Z",
+  "4.3.0": "2016-02-08T08:57:19.880Z",
+  "4.4.0": "2016-02-16T07:10:16.856Z",
+  "4.5.0": "2016-02-17T08:39:42.533Z",
+  "4.5.1": "2016-02-22T06:42:24.244Z",
+  "4.6.0": "2016-03-02T03:24:37.179Z",
+  "4.6.1": "2016-03-02T18:09:40.696Z",
+  "4.7.0": "2016-03-31T15:46:33.373Z",
+  "4.8.0": "2016-04-04T14:54:33.612Z",
+  "4.8.1": "2016-04-04T15:43:49.109Z",
+  "4.8.2": "2016-04-05T02:15:16.661Z",
+  "4.9.0": "2016-04-08T15:22:34.228Z",
+  "4.10.0": "2016-04-11T14:43:56.586Z",
+  "4.11.0": "2016-04-13T15:32:30.507Z",
+  "4.11.1": "2016-04-14T07:21:23.548Z",
+  "4.11.2": "2016-05-02T15:01:02.189Z",
+  "4.12.0": "2016-05-08T19:25:43.826Z",
+  "4.13.0": "2016-05-23T05:07:23.403Z",
+  "4.13.1": "2016-05-23T15:59:05.944Z",
+  "4.14.0": "2016-07-24T18:40:58.495Z",
+  "4.14.1": "2016-07-29T14:49:10.278Z",
+  "4.14.2": "2016-08-08T15:35:49.019Z",
+  "4.15.0": "2016-08-12T14:39:28.783Z",
+  "4.16.0": "2016-09-19T14:59:14.886Z",
+  "4.16.1": "2016-09-20T16:59:53.967Z",
+  "4.16.2": "2016-09-26T03:11:05.302Z",
+  "4.16.3": "2016-10-03T16:43:31.571Z",
+  "4.16.4": "2016-10-06T15:13:30.196Z",
+  "4.16.5": "2016-10-31T06:49:14.797Z",
+  "4.16.6": "2016-11-01T06:38:07.989Z",
+  "4.17.0": "2016-11-14T07:00:08.291Z",
+  "4.17.1": "2016-11-15T07:03:25.950Z",
+  "4.17.2": "2016-11-16T07:21:41.106Z",
+  "4.17.3": "2016-12-24T14:25:39.754Z",
+  "4.17.4": "2016-12-31T22:33:56.623Z",
+  "4.17.5": "2018-02-04T00:34:41.111Z",
+  "4.17.9": "2018-04-24T17:44:40.268Z",
+  "4.17.10": "2018-04-24T18:07:37.696Z",
+  "4.17.11": "2018-09-12T18:32:16.141Z",
+  "4.17.12": "2019-07-09T21:07:51.647Z",
+  "4.17.13": "2019-07-09T22:24:38.453Z",
+  "4.17.14": "2019-07-10T15:44:39.173Z",
+  "4.17.15": "2019-07-19T02:28:46.584Z",
+  "4.17.16": "2020-07-08T10:50:37.915Z",
+  "4.17.17": "2020-07-08T12:08:37.292Z",
+  "4.17.18": "2020-07-08T16:07:27.110Z",
+  "4.17.19": "2020-07-08T17:14:40.866Z",
+  "4.17.20": "2020-08-13T16:53:54.152Z",
+  "4.17.21": "2021-02-20T15:42:16.891Z",
+  "4.17.23": "2026-01-21T17:29:52.831Z",
+  "4.18.0": "2026-03-31T18:18:42.717Z",
+  "4.18.1": "2026-04-01T21:01:20.458Z"
+ },
+ "license": "MIT",
+ "homepage": "https://lodash.com/"
+}

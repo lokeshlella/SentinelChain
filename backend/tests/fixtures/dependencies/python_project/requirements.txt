@@ -1,0 +1,24 @@
+# Sentinel Chain fixture: every requirements.txt construct the extractor must handle.
+--index-url https://pypi.org/simple
+--extra-index-url https://example.invalid/simple
+-r requirements/base.txt
+-c constraints.txt
+-e .
+
+requests==2.25.1
+Django>=3.2,<4
+foo[extra]==1.0 ; python_version<"3.9"
+pkg @ https://example.com/pkg-1.0.tar.gz
+pkg2==1.0  # trailing comment
+pkg3 === 1.0
+multi==2.0 \
+    --hash=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    --hash=sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+loose
+tilde ~= 1.4
+wildcard == 1.0.*
+git+https://github.com/example/tool.git#egg=tool
+https://example.com/wheels/nameless-1.0-py3-none-any.whl
+this is not a requirement
+SQLAlchemy==2.0.30
+sqlalchemy==2.0.30

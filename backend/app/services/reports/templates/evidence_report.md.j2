@@ -1,0 +1,47 @@
+# {{ report.title }}
+
+Generated {{ header.generated_at }} by the Sentinel Chain evidence report generator (report version {{ report.report_version }}, finding {{ report.finding_id }}, analysis {{ report.analysis_id }}).
+Observed facts, AI reasoning (inference), recommendations and validation results are reported under separate headings and are never mixed.
+
+| Item | Value |
+|---|---|
+| Repository | {{ header.repository | cell }} |
+| Dependency | {{ header.dependency | cell }} |
+| Vulnerability | {{ header.vulnerability | cell }} |
+| Risk | {{ header.risk | cell }} |
+| Decision | **{{ header.decision | cell }}** |
+
+{% for section in report.sections %}
+## {{ section.number }}. {{ section.title }}
+
+{% for note in section.notes %}
+> {{ note }}
+{% endfor %}
+{% if section.notes %}
+
+{% endif %}
+{% if section.observed_facts %}
+### Observed facts
+
+{{ section.observed_facts | md_block }}
+
+{% endif %}
+{% if section.ai_reasoning is not none %}
+### AI reasoning (inference)
+
+{{ section.ai_reasoning | md_block }}
+
+{% endif %}
+{% if section.recommendations is not none %}
+### Recommendations
+
+{{ section.recommendations | md_block }}
+
+{% endif %}
+{% if section.validation_results is not none %}
+### Validation results
+
+{{ section.validation_results | md_block }}
+
+{% endif %}
+{% endfor %}

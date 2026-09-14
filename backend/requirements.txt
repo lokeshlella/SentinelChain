@@ -1,0 +1,32 @@
+# Web framework
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+pydantic>=2.8
+pydantic-settings>=2.4
+python-multipart>=0.0.9
+
+# Persistence
+SQLAlchemy>=2.0.30
+alembic>=1.13
+psycopg[binary]>=3.2
+
+# Knowledge graph
+neo4j>=5.23
+
+# HTTP clients (OSV, Ollama, package registries)
+httpx>=0.27
+
+# Repository handling
+GitPython>=3.1.43
+PyGithub>=2.3
+
+# Sandbox
+docker>=7.1
+
+# Utilities
+packaging>=24.0
+Jinja2>=3.1
+python-dotenv>=1.0
+
+# Testing
+pytest>=8.2

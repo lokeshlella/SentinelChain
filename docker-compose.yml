@@ -1,0 +1,86 @@
+# Sentinel Chain development environment.
+#
+#   docker compose up -d postgres neo4j     # backing services only (run backend/frontend on host)
+#   docker compose up --build               # everything in containers
+#
+# Ollama is intentionally NOT containerised: run it on the host and point the
+# backend at it through OLLAMA_BASE_URL (host.docker.internal from a container).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinel-postgres
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+      POSTGRES_DB: sentinelchain
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinelchain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: sentinel-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/sentinelchain
+      NEO4J_PLUGINS: '[]'
+      NEO4J_server_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"   # browser UI
+      - "7687:7687"   # bolt
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./backend
+    container_name: sentinel-backend
+    profiles: ["full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://sentinel:sentinel@postgres:5432/sentinelchain
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: sentinelchain
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_DOCKER:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      REPOSITORY_WORKSPACE: /workspace
+      DOCKER_TIMEOUT: ${DOCKER_TIMEOUT:-600}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - workspace_data:/workspace
+      # Docker-outside-of-Docker: the sandbox uses the host daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: sentinel-frontend
+    profiles: ["full"]
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  workspace_data:
