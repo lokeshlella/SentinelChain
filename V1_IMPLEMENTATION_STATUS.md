@@ -61,10 +61,13 @@ tests + 20 integration tests, all passing._
   excluded), `select_candidates`, `RequirementsTxtModifier` / `PackageJsonModifier`
   (formatting preserved), temporary working copies, deterministic fallback when the LLM is
   unavailable, remediation history per finding.
-* **Docker sandbox** — `DockerSandboxProvider` (no host mounts, `cap_drop ALL`,
-  `no-new-privileges`, memory/CPU/pid limits, timeout kill, step markers, log capture,
-  lock-file artifact copy-back, guaranteed container removal), `DependencySecurityScanner`,
-  `ValidationService` with the documented `overall_result` rules.
+* **Docker sandbox** — `DockerSandboxProvider` (non-root user, read-only root filesystem with
+  in-memory `/workspace` and `/tmp`, no host mounts, `cap_drop ALL`, `no-new-privileges`,
+  memory/CPU/pid limits, configurable network, one `docker exec` per step with the exit code
+  taken from the daemon, host-side deadline that kills the container and marks unfinished
+  steps `UNKNOWN`, host-assembled logs, lock-file artifact copy-back, guaranteed container
+  removal), `DependencySecurityScanner`, `ValidationService` with the documented
+  `overall_result` rules.
 * **Evidence report** — `ReportService` (10 sections, facts / AI reasoning / recommendations /
   validation results kept apart, deterministic final recommendation, JSON + Markdown files).
 * **GitHub PR** — `GitHubProvider` (branch, commit as *Sentinel Chain*, one-off token URL push
@@ -73,6 +76,9 @@ tests + 20 integration tests, all passing._
   vulnerability / versions / impact / risk / validation / diff / checklist, manual instructions).
 * **API & UI** — 33 REST endpoints with typed errors, background execution + polling; React
   dashboard covering the whole workflow, facts and inferences labelled everywhere.
+* **Working-copy hardening** — `repository/git_safety.py`: hooks are never copied,
+  `.git/config` is reduced to an allow-list, `.git` symlinks/gitdir pointers are severed, and
+  all git commands run with hook/fsmonitor/helper overrides and `--no-verify` (audit F-02).
 * **Operations** — `503 DatabaseUnavailable` when PostgreSQL is down (audit F-04),
   health endpoint for every backing service, stage-prefixed logs, startup sweep
   that fails jobs interrupted by a restart, Docker Compose for PostgreSQL / Neo4j / backend /
@@ -97,8 +103,9 @@ tests + 20 integration tests, all passing._
   own estimate. Larger models improve quality at the cost of latency/RAM.
 * Background jobs run inside the API process; a restart marks in-flight jobs `FAILED`
   (they are not resumed). One analysis per repository and one validation per remediation at a time.
-* The sandbox needs network access to install packages; it is isolated from the host but not
-  from the internet.
+* The sandbox needs network access to install packages (`DOCKER_SANDBOX_NETWORK=bridge`); it is
+  isolated from the host (non-root, read-only rootfs, no capabilities, no mounts) but not from
+  the internet unless `DOCKER_SANDBOX_NETWORK=none` is used for vendored projects.
 * OSV data changes over time — the demo README documents how to re-verify the advisory ids.
 * No authentication: the API is meant for a local, single-user setup.
 * Path-based local repositories are copied entirely (minus build artefacts); very large

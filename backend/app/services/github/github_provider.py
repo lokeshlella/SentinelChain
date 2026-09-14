@@ -34,6 +34,7 @@ from github import Auth, Github, GithubException
 from app.core.config import get_settings
 from app.core.logging import get_stage_logger
 from app.models.enums import PullRequestStatus
+from app.services.repository.git_safety import SAFE_GIT_OPTIONS
 from app.services.github.base import GitProvider, PullRequestResult, PullRequestSpec
 from app.services.github.instructions import build_manual_instructions
 from app.services.repository.github_provider import parse_github_remote
@@ -132,6 +133,15 @@ def run_git(
     return output if isinstance(output, str) else output.decode("utf-8", "replace")
 
 
+def _hardened(runner: GitRunner) -> GitRunner:
+    """Wrap a runner so every git command carries :data:`SAFE_GIT_OPTIONS` (no hooks, no helper commands)."""
+
+    def run(args: Sequence[str], *, cwd: Path, env: Mapping[str, str] | None = None, timeout: float | None = None) -> str:
+        return runner([*SAFE_GIT_OPTIONS, *args], cwd=cwd, env=env, timeout=timeout)
+
+    return run
+
+
 class _PullRequestFailure(Exception):
     """Internal: aborts the flow with a user-facing message and a result status."""
 
@@ -161,7 +171,7 @@ class GitHubProvider(GitProvider):
         """
         self._token: str | None = (token or "").strip() or None
         self._github_client = github_client
-        self._run: GitRunner = git_runner or run_git
+        self._run: GitRunner = _hardened(git_runner or run_git)
         self._timeout: float | None = timeout if timeout is not None else get_settings().git_clone_timeout
 
     # ------------------------------------------------------------------ contract
@@ -266,7 +276,7 @@ class GitHubProvider(GitProvider):
                 log.info("No new changes; reusing existing Sentinel Chain commit %s", reused[:12])
                 return reused
             raise _PullRequestFailure("No changes to commit: the workspace already matches HEAD")
-        self._git(["-c", "commit.gpgsign=false", "commit", "-m", spec.commit_message], workspace, env=COMMIT_ENV)
+        self._git(["-c", "commit.gpgsign=false", "commit", "--no-verify", "-m", spec.commit_message], workspace, env=COMMIT_ENV)
         sha = self._git(["rev-parse", "HEAD"], workspace).strip()
         log.info("Committed %s on %s (%s)", ", ".join(staged.splitlines()), spec.head_branch, sha[:12])
         return sha
