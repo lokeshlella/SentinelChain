@@ -18,6 +18,7 @@ class Validation(Base):
         ForeignKey("remediations.remediation_id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     build_status: Mapped[str] = mapped_column(String(20), nullable=False, default="UNKNOWN")
     test_status: Mapped[str] = mapped_column(String(20), nullable=False, default="UNKNOWN")
     security_scan_status: Mapped[str] = mapped_column(String(20), nullable=False, default="UNKNOWN")

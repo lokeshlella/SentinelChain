@@ -13,6 +13,12 @@ class SourceType(StrEnum):
     LOCAL = "local"
 
 
+class RepositoryStatus(StrEnum):
+    PENDING = "PENDING"
+    READY = "READY"
+    FAILED = "FAILED"
+
+
 class Ecosystem(StrEnum):
     PYPI = "PyPI"
     NPM = "npm"

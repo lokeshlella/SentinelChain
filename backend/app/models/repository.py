@@ -16,6 +16,9 @@ class Repository(Base):
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)  # github | local
     branch: Mapped[str | None] = mapped_column(String(255))
+    # PENDING (ingestion queued/running) | READY | FAILED — ingestion runs as a background job.
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING", server_default="READY")
+    error_message: Mapped[str | None] = mapped_column(Text)
     language: Mapped[str | None] = mapped_column(String(50))
     # Path of the clone / working copy that Sentinel Chain owns (never the user's original for github).
     local_path: Mapped[str | None] = mapped_column(Text)

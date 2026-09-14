@@ -102,11 +102,18 @@ export default function Finding() {
   }
   useEffect(load, [id])
 
+  // The on-demand AI run is a background job: poll while ai_status is RUNNING.
+  useEffect(() => {
+    if (!finding || finding.ai_status !== 'RUNNING') return undefined
+    const timer = setTimeout(() => api.get(`/findings/${id}`).then(setFinding).catch(setError), 3000)
+    return () => clearTimeout(timer)
+  }, [finding, id])
+
   async function runAi() {
     setAiBusy(true)
     setAiError(null)
     try {
-      const updated = await api.post(`/findings/${id}/analyze`)
+      const updated = await api.post(`/findings/${id}/analyze`)  // 202: ai_status becomes RUNNING, polling takes over
       setFinding(updated)
     } catch (e) {
       setAiError(e)
@@ -248,8 +255,8 @@ export default function Finding() {
         title="AI reasoning (inference)"
         subtitle="Produced by the dependency, impact and risk agents (Ollama). Everything here is model output — check it against the observed facts above."
         actions={
-          <button type="button" className="btn primary" disabled={aiBusy} onClick={runAi}>
-            {aiBusy ? <><span className="spinner light" /> Running agents…</> : (ai ? 'Re-run AI analysis' : 'Run AI analysis')}
+          <button type="button" className="btn primary" disabled={aiBusy || aiRunning} onClick={runAi}>
+            {aiBusy || aiRunning ? <><span className="spinner light" /> Running agents…</> : (ai ? 'Re-run AI analysis' : 'Run AI analysis')}
           </button>
         }
       >

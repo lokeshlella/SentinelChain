@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.api.serializers import finding_summary
 from app.core.exceptions import NotFoundError
+from app.services.jobs import expire_if_stale
 from app.models import PullRequest, Remediation, Validation
 from app.models.enums import ValidationStatus
 from app.schemas.entities import (
@@ -58,9 +59,16 @@ def report_response(report_service, finding_id: int, remediation_id: int | None,
 # ---------------------------------------------------------------- findings → remediation / report
 
 
-@router.post("/findings/{finding_id}/remediate", response_model=RemediationDetail, status_code=status.HTTP_201_CREATED, summary="Generate a remediation (synchronous)")
-def remediate_finding(finding_id: int, db: Session = deps.DbDep, factory=Depends(deps.get_remediation_factory)):
-    remediation = factory(db).remediate(finding_id)
+@router.post("/findings/{finding_id}/remediate", response_model=RemediationDetail, status_code=status.HTTP_202_ACCEPTED, summary="Generate a remediation (background; poll the remediation until status != PENDING)")
+def remediate_finding(
+    finding_id: int,
+    background: BackgroundTasks,
+    db: Session = deps.DbDep,
+    factory=Depends(deps.get_remediation_factory),
+    session_maker=Depends(deps.get_session_maker),
+):
+    remediation = factory(db).start(finding_id)  # synchronous pre-checks (lock files, unpinned, missing copy) → 400
+    background.add_task(deps.run_remediation_job, remediation.remediation_id, session_maker=session_maker, remediation_factory=factory)
     db.refresh(remediation)
     return remediation_detail(remediation)
 
@@ -80,7 +88,9 @@ def finding_report(
 
 @router.get("/remediations/{remediation_id}", response_model=RemediationDetail)
 def get_remediation(remediation_id: int, db: Session = deps.DbDep):
-    return remediation_detail(_get_remediation(db, remediation_id))
+    remediation = _get_remediation(db, remediation_id)
+    expire_if_stale(db, remediation)
+    return remediation_detail(remediation)
 
 
 @router.get("/remediations/{remediation_id}/validations", response_model=list[ValidationSummary])
@@ -105,6 +115,8 @@ def validate_remediation(
             Validation.status.in_([ValidationStatus.PENDING, ValidationStatus.RUNNING]),
         )
     )
+    if running is not None and expire_if_stale(db, running):
+        running = None  # dead job, just marked FAILED by the watchdog
     if running is not None:
         from app.core.exceptions import ConflictError
 
@@ -146,6 +158,7 @@ def get_validation(validation_id: int, db: Session = deps.DbDep, factory=Depends
     validation = db.get(Validation, validation_id)
     if validation is None:
         raise NotFoundError(f"Validation {validation_id} not found")
+    expire_if_stale(db, validation)
     logs = factory(db).read_logs(validation) if validation.logs_path else None
     return validation_detail(validation, logs)
 

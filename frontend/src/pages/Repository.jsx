@@ -131,6 +131,28 @@ export default function Repository() {
 
   useEffect(load, [id])
 
+  // Ingestion (clone / copy + profile) runs in the background: keep polling while PENDING.
+  useEffect(() => {
+    if (!repo || repo.status !== 'PENDING') return undefined
+    const timer = setTimeout(() => api.get(`/repositories/${id}`).then(setRepo).catch(setError), 3000)
+    return () => clearTimeout(timer)
+  }, [repo, id])
+
+  const [ingestBusy, setIngestBusy] = useState(false)
+  async function reingest() {
+    setIngestBusy(true)
+    setError(null)
+    try {
+      setRepo(await api.post(`/repositories/${id}/ingest`))
+    } catch (e) {
+      setError(e)
+    } finally {
+      setIngestBusy(false)
+    }
+  }
+  const ingesting = repo?.status === 'PENDING'
+  const ingestFailed = repo?.status === 'FAILED'
+
   useEffect(() => {
     setDeps(null)
     setDepsError(null)
@@ -179,9 +201,21 @@ export default function Repository() {
       <p className="crumbs"><Link to="/">Dashboard</Link> › Repository #{repo.repository_id}</p>
       <div className="page-head">
         <h1>{repo.name || `Repository #${repo.repository_id}`}</h1>
-        {latest?.overall_risk && <StatusBadge value={latest.overall_risk} />}
+        <div className="badges">
+          {repo.status && repo.status !== 'READY' && <StatusBadge value={repo.status === 'PENDING' ? 'INGESTING' : repo.status} />}
+          {latest?.overall_risk && <StatusBadge value={latest.overall_risk} />}
+        </div>
       </div>
       {error && <ErrorBox error={error} />}
+      {ingesting && (
+        <div className="alert info"><span className="spinner" />Ingesting the repository (clone / copy and structure profile) in the background… this page refreshes automatically.</div>
+      )}
+      {ingestFailed && (
+        <div className="alert error">
+          Ingestion failed: {repo.error_message || 'unknown error'}{' '}
+          <button type="button" className="btn" disabled={ingestBusy} onClick={reingest}>{ingestBusy ? 'Retrying…' : 'Retry ingestion'}</button>
+        </div>
+      )}
 
       <Section
         title="Details"
@@ -221,8 +255,8 @@ export default function Repository() {
             <input type="checkbox" checked={refresh} onChange={(e) => setRefresh(e.target.checked)} disabled={analyzeBusy} />
             Refresh working copy (re-clone / re-copy)
           </label>
-          <button type="button" className="btn primary" disabled={analyzeBusy} onClick={analyze}>
-            {analyzeBusy ? 'Starting…' : 'Analyze'}
+          <button type="button" className="btn primary" disabled={analyzeBusy || ingesting} onClick={analyze} title={ingesting ? 'Wait for ingestion to finish' : undefined}>
+            {analyzeBusy ? 'Starting…' : ingesting ? 'Ingesting…' : 'Analyze'}
           </button>
         </div>
         {analyzeError && (

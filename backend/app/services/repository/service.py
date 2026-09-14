@@ -21,7 +21,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import ConflictError, NotFoundError, RepositoryError, SentinelError, ValidationFailedError
 from app.core.logging import get_stage_logger
 from app.models import Component, Repository
-from app.models.enums import SourceType
+from app.models.enums import RepositoryStatus, SourceType
 from app.services.repository.analyzer import RepositoryAnalyzer, RepositoryProfile
 from app.services.repository.base import RepositoryProvider, RepositorySource
 from app.services.repository.github_provider import ACCEPTED_URL_FORMS, GitHubRepositoryProvider
@@ -78,8 +78,15 @@ class RepositoryService:
         source_url: str,
         source_type: SourceType | str | None = None,
         branch: str | None = None,
+        *,
+        ingest: bool = True,
     ) -> Repository:
-        """Validate, create the row and ingest. Raises ConflictError for an already registered source."""
+        """Validate and create the row; ingest synchronously unless ``ingest=False``.
+
+        Raises ConflictError for an already registered source. With ``ingest=False`` the
+        row is left in status PENDING for a background :meth:`ingest_job` (the API path,
+        audit finding F-05: a clone must not block the request thread).
+        """
         location = (source_url or "").strip()
         if not location:
             raise ValidationFailedError("source_url is required")
@@ -95,16 +102,35 @@ class RepositoryService:
             source_url=source.location,
             source_type=provider.source_type.value,
             branch=source.branch,
+            status=RepositoryStatus.PENDING,
         )
         self.db.add(repository)
         self.db.commit()  # obtain repository_id for the workspace directory
         logger.info("Registered %s repository %s as id=%s", provider.source_type.value, source.location, repository.repository_id)
-
+        if not ingest:
+            return repository
         try:
             return self.ingest(repository, refresh=True)
         except Exception:
             self._discard(repository)
             raise
+
+    def ingest_job(self, repository_id: int, *, refresh: bool = True) -> Repository:
+        """Background entry point: ingest and record READY / FAILED on the row (never raises)."""
+        repository = self.get(repository_id)
+        repository.status = RepositoryStatus.PENDING
+        repository.error_message = None
+        self.db.commit()
+        try:
+            return self.ingest(repository, refresh=refresh)
+        except Exception as exc:  # noqa: BLE001 - the user sees the reason on the repository page
+            self.db.rollback()
+            repository = self.get(repository_id)
+            repository.status = RepositoryStatus.FAILED
+            repository.error_message = getattr(exc, "message", None) or f"{exc.__class__.__name__}: {exc}"
+            self.db.commit()
+            logger.error("Ingestion of repository %s failed: %s", repository_id, repository.error_message)
+            return repository
 
     def ingest(self, repository: Repository, refresh: bool = False) -> Repository:
         """Fetch (when missing or ``refresh``), analyse and store profile + components."""
@@ -131,6 +157,8 @@ class RepositoryService:
         repository.profile = profile.to_dict()
         repository.language = profile.language
         added, updated, removed = self._sync_components(repository, profile)
+        repository.status = RepositoryStatus.READY
+        repository.error_message = None
         self.db.commit()
         logger.info(
             "Repository '%s' (id=%s) ingested: %d files, language=%s, components +%d/~%d/-%d, %d dependency files",

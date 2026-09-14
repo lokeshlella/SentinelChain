@@ -81,6 +81,7 @@ def client(engine, tmp_path: Path):
         deps.get_pipeline_factory: lambda: pipeline_factory,
         deps.get_graph_service: lambda: graph,
         deps.get_repository_service: override_repo_service,
+        deps.get_repository_service_factory: lambda: (lambda db: RepositoryService(db, settings)),
         deps.get_remediation_factory: lambda: remediation_factory,
         deps.get_validation_factory: lambda: validation_factory,
         deps.get_pull_request_factory: lambda: pr_factory,
@@ -100,8 +101,9 @@ def test_end_to_end_workflow_via_api(client):
 
     # remediation
     response = client.post(f"/api/findings/{fid}/remediate")
-    assert response.status_code == 201, response.text
-    remediation = response.json()
+    assert response.status_code == 202, response.text
+    assert response.json()["status"] == "PENDING"  # the LLM/registry work runs in the background
+    remediation = client.get(f"/api/remediations/{response.json()['remediation_id']}").json()
     assert remediation["status"] == "PROPOSED" and remediation["recommended_version"] == "2.31.0"
     assert remediation["proposed_change"]["file"] == "requirements.txt" and "+requests==2.31.0" in remediation["proposed_change"]["diff"]
     assert remediation["candidates"]["preferred_version"] == "2.31.0"
@@ -144,6 +146,7 @@ def test_pull_request_requires_validation(client):
     analysis = client.post(f"/api/repositories/{repo['repository_id']}/analyze", json={"run_ai": False}).json()
     fid = client.get(f"/api/analyses/{analysis['analysis_id']}/findings").json()[0]["finding_id"]
     rid = client.post(f"/api/findings/{fid}/remediate").json()["remediation_id"]
+    assert client.get(f"/api/remediations/{rid}").json()["status"] == "PROPOSED"
     response = client.post(f"/api/remediations/{rid}/pull-request")
     assert response.status_code == 400 and "validate" in response.json()["message"]
     assert client.get("/api/remediations/999").status_code == 404

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import NotFoundError, ValidationFailedError
+from app.db.base import utcnow
 from app.core.logging import get_stage_logger
 from app.models import Finding, Remediation, Vulnerability
 from app.models.enums import RemediationStatus
@@ -56,21 +57,39 @@ class RemediationService:
     # ------------------------------------------------------------------ public API
 
     def remediate(self, finding_id: int) -> Remediation:
+        """Synchronous convenience: ``start`` + ``run``; re-raises a ValidationFailedError from ``run``."""
+        remediation = self.start(finding_id)
+        return self.run(remediation.remediation_id, raise_validation_errors=True)
+
+    def start(self, finding_id: int) -> Remediation:
+        """Validate the request and create the PENDING row (fast; the API answers 202 with it)."""
         finding = self.db.get(Finding, finding_id)
         if finding is None:
             raise NotFoundError(f"Finding {finding_id} not found")
-        dependency = finding.dependency
-        repository = finding.analysis.repository
         self._check_remediable(finding)
-
-        remediation = Remediation(finding_id=finding.finding_id, current_version=dependency.version, status=RemediationStatus.PENDING)
+        dependency = finding.dependency
+        remediation = Remediation(
+            finding_id=finding.finding_id, current_version=dependency.version,
+            status=RemediationStatus.PENDING, heartbeat_at=utcnow(),
+        )
         self.db.add(remediation)
         self.db.commit()
-        rid = remediation.remediation_id
         log.info(
-            "Remediation %d started for %s %s (%s) in repository %d",
-            rid, dependency.package_name, dependency.version, finding.vulnerability.identifier, repository.repository_id,
+            "Remediation %d queued for %s %s (%s) in repository %d",
+            remediation.remediation_id, dependency.package_name, dependency.version,
+            finding.vulnerability.identifier, finding.analysis.repository.repository_id,
         )
+        return remediation
+
+    def run(self, remediation_id: int, *, raise_validation_errors: bool = False) -> Remediation:
+        """Candidates → LLM recommendation → working copy → file change. Never leaves the row PENDING."""
+        remediation = self.get(remediation_id)
+        finding = remediation.finding
+        dependency = finding.dependency
+        repository = finding.analysis.repository
+        rid = remediation.remediation_id
+        remediation.heartbeat_at = utcnow()
+        self.db.commit()
         workspace: Path | None = None
         try:
             vulnerabilities = self._vulnerabilities_of(finding)
@@ -78,6 +97,7 @@ class RemediationService:
                 dependency, vulnerabilities, registry=self.registry, vulnerability_service=self.vulnerabilities
             )
             remediation.candidates = candidates.to_dict()
+            remediation.heartbeat_at = utcnow()
             self.db.commit()
             log.info(
                 "Candidates for %s: preferred=%s allowed=%s latest=%s (verified_safe=%s)",
@@ -108,6 +128,7 @@ class RemediationService:
             remediation.ai_result = ai_result_json
             remediation.proposed_change = {**change.to_dict(), "workspace_path": str(workspace)}
             remediation.status = RemediationStatus.PROPOSED
+            remediation.heartbeat_at = utcnow()
             self.db.commit()
             log.info("Remediation %d proposed: %s %s → %s in %s", rid, dependency.package_name, dependency.version, target_version, change.file)
             return remediation
@@ -116,10 +137,11 @@ class RemediationService:
             remediation = self.db.get(Remediation, rid) or remediation
             remediation.status = RemediationStatus.FAILED
             remediation.error_message = getattr(exc, "message", None) or f"{exc.__class__.__name__}: {exc}"
+            remediation.heartbeat_at = utcnow()
             self.db.commit()
             remove_workspace(workspace)
             log.error("Remediation %d failed: %s", rid, remediation.error_message)
-            if isinstance(exc, ValidationFailedError):
+            if raise_validation_errors and isinstance(exc, ValidationFailedError):
                 raise
             return remediation
 

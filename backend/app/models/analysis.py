@@ -17,6 +17,8 @@ class Analysis(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Touched on every commit of the background job; a RUNNING row whose heartbeat is stale is dead.
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING", index=True)
     overall_risk: Mapped[str | None] = mapped_column(String(20))
     triggered_by: Mapped[str] = mapped_column(String(50), nullable=False, default="api")

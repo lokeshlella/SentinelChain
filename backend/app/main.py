@@ -21,26 +21,15 @@ logger = logging.getLogger("sentinel.app")
 
 
 def mark_interrupted_jobs() -> None:
-    """Background jobs do not survive a restart: mark RUNNING/PENDING rows as FAILED with a reason."""
-    from sqlalchemy import select
-
-    from app.db.base import utcnow
+    """Background jobs do not survive a restart: every in-progress row is marked FAILED with a reason."""
     from app.db.session import get_session_factory
-    from app.models import Analysis, Validation
-    from app.models.enums import AnalysisStatus, ValidationStatus
+    from app.services.jobs import sweep_stale_jobs
 
-    reason = "Interrupted by a backend restart; start it again"
     try:
         with get_session_factory()() as db:
-            analyses = db.scalars(select(Analysis).where(Analysis.status.in_([AnalysisStatus.PENDING, AnalysisStatus.RUNNING]))).all()
-            for analysis in analyses:
-                analysis.status, analysis.error_message, analysis.completed_at = AnalysisStatus.FAILED, reason, utcnow()
-            validations = db.scalars(select(Validation).where(Validation.status.in_([ValidationStatus.PENDING, ValidationStatus.RUNNING]))).all()
-            for validation in validations:
-                validation.status, validation.error_message = ValidationStatus.FAILED, reason
-            db.commit()
-        if analyses or validations:
-            logger.warning("Marked %d analyses and %d validations interrupted by restart", len(analyses), len(validations))
+            counts = sweep_stale_jobs(db, settings, everything=True)
+        if any(counts.values()):
+            logger.warning("Marked jobs interrupted by restart: %s", ", ".join(f"{k}={v}" for k, v in counts.items() if v))
     except Exception as exc:  # noqa: BLE001 - the database may be down; health reports it
         logger.warning("Could not sweep interrupted jobs: %s", str(exc).splitlines()[0][:160])
 

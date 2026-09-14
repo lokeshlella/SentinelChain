@@ -93,8 +93,9 @@ tests + 20 integration tests, all passing._
 
 * A 3B local model produces grounded but shallow reasoning; confidence values are the model's
   own estimate. Larger models improve quality at the cost of latency/RAM.
-* Background jobs run inside the API process; a restart marks in-flight jobs `FAILED`
-  (they are not resumed). One analysis per repository and one validation per remediation at a time.
+* Background jobs run inside the API process; a restart marks in-flight jobs `FAILED` and a
+  job whose heartbeat goes stale is marked `FAILED` by the watchdog (neither is resumed).
+  One analysis per repository and one validation per remediation at a time.
 * The sandbox needs network access to install packages; it is isolated from the host but not
   from the internet.
 * OSV data changes over time — the demo README documents how to re-verify the advisory ids.

@@ -21,6 +21,7 @@ class Remediation(Base):
     recommendation: Mapped[str | None] = mapped_column(Text)
     confidence_score: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDING", index=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Deterministic candidate information (fixed versions from OSV, registry lookups, ...).
     candidates: Mapped[dict | None] = mapped_column(JSON)
     # Structured RemediationAgent output.

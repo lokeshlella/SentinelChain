@@ -146,7 +146,12 @@ export default function Dashboard() {
               rowKey={(r) => r.repository_id}
               empty="No repositories yet — add one above."
               columns={[
-                { key: 'name', label: 'Name', render: (r) => <Link to={`/repositories/${r.repository_id}`}>{r.name || `#${r.repository_id}`}</Link> },
+                { key: 'name', label: 'Name', render: (r) => (
+                  <span>
+                    <Link to={`/repositories/${r.repository_id}`}>{r.name || `#${r.repository_id}`}</Link>
+                    {r.status && r.status !== 'READY' && <> <StatusBadge value={r.status === 'PENDING' ? 'INGESTING' : r.status} /></>}
+                  </span>
+                ) },
                 { key: 'source_url', label: 'Source', render: (r) => <span className="mono small">{r.source_url}</span> },
                 { key: 'source_type', label: 'Type' },
                 { key: 'language', label: 'Language' },
