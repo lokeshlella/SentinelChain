@@ -412,7 +412,10 @@ def session_factory(tmp_path):
 
 
 def committed_analysis(session: Session) -> Analysis:
-    repo = Repository(name="demo", source_url="/tmp/demo", source_type="local")
+    import uuid
+
+    # one repository per call: the same source may only be registered once (uq_repositories_source_branch)
+    repo = Repository(name="demo", source_url=f"/tmp/demo-{uuid.uuid4().hex[:8]}", source_type="local")
     session.add(repo)
     session.flush()
     analysis = Analysis(repository_id=repo.repository_id, status="RUNNING")

@@ -81,7 +81,8 @@ docker compose --profile full up --build
 | `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` | Knowledge graph connection |
 | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Local LLM endpoint and model name (never hard-coded in code) |
 | `OLLAMA_TIMEOUT`, `AI_MAX_FINDINGS_PER_ANALYSIS` | LLM call timeout; cap on findings analysed per run |
-| `GITHUB_TOKEN` | Optional. Enables private clones and draft PR creation |
+| `GITHUB_TOKEN` | Optional. Enables private clones and draft PR creation (`/api/health` verifies it) |
+| `API_KEY` | Optional. When set, `/api` requests need `X-API-Key` (frontend: `VITE_API_KEY`) |
 | `REPOSITORY_WORKSPACE` | Directory for clones, working copies, sandbox logs (default `./workspace`) |
 | `DOCKER_TIMEOUT`, `DOCKER_PYTHON_IMAGE`, `DOCKER_NODE_IMAGE` | Sandbox limits and base images |
 

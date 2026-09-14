@@ -9,7 +9,7 @@ from app.api.serializers import finding_summary
 from app.core.exceptions import NotFoundError
 from app.services.jobs import expire_if_stale
 from app.models import PullRequest, Remediation, Validation
-from app.models.enums import ValidationStatus
+from app.models.enums import PullRequestStatus, ValidationStatus
 from app.schemas.entities import (
     PullRequestDetail,
     PullRequestSummary,
@@ -137,7 +137,7 @@ def remediation_report(
     return report_response(factory(db), remediation.finding_id, remediation_id, format)
 
 
-@router.post("/remediations/{remediation_id}/pull-request", response_model=PullRequestDetail, status_code=status.HTTP_201_CREATED, summary="Create a draft GitHub pull request")
+@router.post("/remediations/{remediation_id}/pull-request", response_model=PullRequestDetail, status_code=status.HTTP_201_CREATED, summary="Create a draft GitHub pull request (201 opened, 200 prepared only, 502 GitHub refused)")
 def create_pull_request(
     remediation_id: int,
     payload: PullRequestRequest | None = None,
@@ -147,7 +147,19 @@ def create_pull_request(
     payload = payload or PullRequestRequest()
     pr = factory(db).create(remediation_id, force=payload.force)
     db.refresh(pr)
-    return PullRequestDetail.model_validate(pr)
+    detail = PullRequestDetail.model_validate(pr)
+    # The record always exists, but the HTTP status must say what happened (audit F-13):
+    # 201 = a pull request was opened on GitHub, 200 = prepared but not opened (no token /
+    # not a GitHub repository), 502 = GitHub refused (auth, push, API failure).
+    if detail.review_status in (PullRequestStatus.DRAFT, PullRequestStatus.OPEN):
+        code = status.HTTP_201_CREATED
+    elif detail.review_status == PullRequestStatus.UNAVAILABLE:
+        code = status.HTTP_200_OK
+    else:
+        code = status.HTTP_502_BAD_GATEWAY
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=code, content=detail.model_dump(mode="json"))
 
 
 # ---------------------------------------------------------------- validations

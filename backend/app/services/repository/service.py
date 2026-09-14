@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -105,7 +106,15 @@ class RepositoryService:
             status=RepositoryStatus.PENDING,
         )
         self.db.add(repository)
-        self.db.commit()  # obtain repository_id for the workspace directory
+        try:
+            self.db.commit()  # obtain repository_id for the workspace directory
+        except IntegrityError as exc:
+            # uq_repositories_source_branch fired: a concurrent registration won the race (audit F-14).
+            self.db.rollback()
+            raise ConflictError(
+                f"Repository {source.location} was registered concurrently; refresh the list",
+                details={"source_url": source.location, "branch": source.branch},
+            ) from exc
         logger.info("Registered %s repository %s as id=%s", provider.source_type.value, source.location, repository.repository_id)
         if not ingest:
             return repository

@@ -99,7 +99,8 @@ tests + 20 integration tests, all passing._
 * The sandbox needs network access to install packages; it is isolated from the host but not
   from the internet.
 * OSV data changes over time — the demo README documents how to re-verify the advisory ids.
-* No authentication: the API is meant for a local, single-user setup.
+* Authentication is an optional shared secret (`API_KEY` / `X-API-Key`); the API is meant for a
+  local, single-user setup.
 * Path-based local repositories are copied entirely (minus build artefacts); very large
   repositories take time and disk.
 
