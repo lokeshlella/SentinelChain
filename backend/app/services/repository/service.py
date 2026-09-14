@@ -162,12 +162,42 @@ class RepositoryService:
                     "Repository %s has local_path %s outside its workspace directory %s; leaving it in place",
                     repository_id, repository.local_path, self.workspace_dir(repository_id),
                 )
+        # Artefacts keyed by remediation / validation id live outside workspace/repos/<id>;
+        # collect them before the cascade removes the rows (audit finding F-07).
+        paths.update(self._artefact_dirs(repository_id))
         name = repository.name
         self.db.delete(repository)
         self.db.commit()
-        for path in paths:
-            self._remove_dir(path)
-        logger.info("Deleted repository '%s' (id=%s) and its workspace copy", name, repository_id)
+        removed = 0
+        for path in sorted(paths):
+            removed += int(self._remove_dir(path))
+        logger.info("Deleted repository '%s' (id=%s): %d workspace directories removed", name, repository_id, removed)
+
+    def _artefact_dirs(self, repository_id: int) -> set[Path]:
+        """Remediation working copies, validation logs and reports of every finding of the repository."""
+        from sqlalchemy import select
+
+        from app.models import Analysis, Finding, Remediation, Validation
+
+        remediation_ids = list(
+            self.db.scalars(
+                select(Remediation.remediation_id)
+                .join(Finding, Finding.finding_id == Remediation.finding_id)
+                .join(Analysis, Analysis.analysis_id == Finding.analysis_id)
+                .where(Analysis.repository_id == repository_id)
+            )
+        )
+        validation_ids = list(
+            self.db.scalars(select(Validation.validation_id).where(Validation.remediation_id.in_(remediation_ids)))
+        ) if remediation_ids else []
+        root = self.settings.workspace_path
+        dirs: set[Path] = set()
+        for rid in remediation_ids:
+            dirs.add(root / "remediations" / str(rid))
+            dirs.add(root / "reports" / str(rid))
+        for vid in validation_ids:
+            dirs.add(root / "validations" / str(vid))
+        return dirs
 
     # ------------------------------------------------------------------ helpers
 
@@ -327,10 +357,15 @@ class RepositoryService:
         return None
 
     @staticmethod
-    def _remove_dir(path: Path) -> None:
-        if not path.exists():
-            return
+    def _remove_dir(path: Path) -> bool:
+        if not path.exists() and not path.is_symlink():
+            return False
         try:
-            shutil.rmtree(path)
+            if path.is_symlink():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
+            return True
         except OSError as exc:
             logger.warning("Could not remove workspace directory %s: %s", path, exc)
+            return False
