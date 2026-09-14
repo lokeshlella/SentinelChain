@@ -42,6 +42,7 @@ from app.models import (
     Validation,
     Vulnerability,
 )
+from app.services.sandbox.service import is_partial_pass
 from app.models.enums import AIStatus, CheckResult, RemediationStatus, RiskLevel, StageStatus, ValidationStatus
 from app.services.analysis.context import fixed_versions_for
 from app.services.analysis.risk import provisional_risk_from_severity
@@ -142,10 +143,9 @@ def final_recommendation(remediation: Remediation | None, validation: Validation
 
     * no remediation or no validation                → "Analysis only — not validated"
     * validation not COMPLETED (FAILED / RUNNING / PENDING) → "Do not apply yet"
-    * overall PASS and tests PASS                    → "Apply"
-    * overall PASS and tests SKIPPED                 → "Apply with manual testing"
-    * overall PASS but tests neither PASS nor SKIPPED (UNKNOWN) → "Do not apply yet"
-    * overall FAIL / UNKNOWN / SKIPPED               → "Do not apply yet"
+    * overall PASS (build, tests and security all passed)          → "Apply"
+    * build PASS + security PASS + tests SKIPPED (overall UNKNOWN) → "Apply with manual testing"
+    * anything else (FAIL, UNKNOWN for other reasons)              → "Do not apply yet"
     """
     if remediation is None:
         return FinalRecommendation(
@@ -172,23 +172,19 @@ def _decision_from_results(validation: Validation) -> FinalRecommendation:
         f"build {validation.build_status}, tests {validation.test_status}, "
         f"security scan {validation.security_scan_status}"
     )
-    if validation.overall_result != CheckResult.PASS:
-        return FinalRecommendation(
-            decision=DECISION_DO_NOT_APPLY,
-            reason=f"Validation overall result is {validation.overall_result} ({summary}).",
-        )
-    if validation.test_status == CheckResult.PASS:
+    if validation.overall_result == CheckResult.PASS:
         return FinalRecommendation(
             decision=DECISION_APPLY, reason=f"Validation passed with tests executed and passing ({summary})."
         )
-    if validation.test_status == CheckResult.SKIPPED:
+    if is_partial_pass(validation.build_status, validation.test_status, validation.security_scan_status):
         return FinalRecommendation(
             decision=DECISION_APPLY_WITH_MANUAL_TESTING,
-            reason=f"Validation passed but no automated tests were run ({summary}); test the change manually.",
+            reason=f"Partially validated: the change installs and the security scan is clean, but no automated "
+            f"tests were run ({summary}); overall result is {validation.overall_result} — test the change manually.",
         )
     return FinalRecommendation(
         decision=DECISION_DO_NOT_APPLY,
-        reason=f"Validation passed overall but the test result is {validation.test_status} ({summary}).",
+        reason=f"Validation overall result is {validation.overall_result} ({summary}).",
     )
 
 

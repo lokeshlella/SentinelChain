@@ -84,6 +84,9 @@ export default function Validation() {
           <div className="tile"><div className="tile-value"><StatusBadge value={v.security_scan_status} /></div><div className="tile-label">Security scan</div></div>
           <div className="tile"><div className="tile-value"><StatusBadge value={v.overall_result} /></div><div className="tile-label">Overall</div></div>
         </div>
+        {String(v.build_status).toUpperCase() === 'PASS' && String(v.security_scan_status).toUpperCase() === 'PASS' && String(v.test_status).toUpperCase() === 'SKIPPED' && (
+          <div className="alert info"><strong>Partially validated.</strong> The change installs and the OSV scan is clean, but no test suite ran, so the overall result is <StatusBadge value={v.overall_result} /> rather than PASS. Test the change manually before merging.</div>
+        )}
         <KeyValue
           columns={4}
           items={[

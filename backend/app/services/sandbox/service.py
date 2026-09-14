@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.exceptions import NotFoundError, ValidationFailedError
 from app.core.logging import get_stage_logger
+from app.core.paths import resolve_workspace_path, to_workspace_relative
 from app.db.base import utcnow
 from app.models import Remediation, Validation
 from app.models.enums import CheckResult, RemediationStatus, ValidationStatus
@@ -42,7 +43,7 @@ from app.services.vulnerabilities.service import VulnerabilityService
 log = get_stage_logger("Sandbox")
 
 VALIDATABLE_STATUSES: frozenset[str] = frozenset(
-    {RemediationStatus.PROPOSED, RemediationStatus.VALIDATED, RemediationStatus.VALIDATION_FAILED}
+    {RemediationStatus.PROPOSED, RemediationStatus.VALIDATED, RemediationStatus.PARTIALLY_VALIDATED, RemediationStatus.VALIDATION_FAILED}
 )
 TESTS_SKIPPED_WARNING = "No test suite detected; tests were skipped"
 LOGS_FILE_NAME = "logs.txt"
@@ -104,9 +105,12 @@ class ValidationService:
             log.exception("Validation %d crashed", validation_id)
             self._fail(validation, f"{exc.__class__.__name__}: {exc}")
         validation.validated_at = utcnow()
-        remediation.status = (
-            RemediationStatus.VALIDATED if validation.overall_result == CheckResult.PASS else RemediationStatus.VALIDATION_FAILED
-        )
+        if validation.overall_result == CheckResult.PASS:
+            remediation.status = RemediationStatus.VALIDATED
+        elif is_partial_pass(validation.build_status, validation.test_status, validation.security_scan_status):
+            remediation.status = RemediationStatus.PARTIALLY_VALIDATED
+        else:
+            remediation.status = RemediationStatus.VALIDATION_FAILED
         self.db.commit()
         log.info(
             "Validation %d %s in %.1fs: build %s, tests %s, security %s -> overall %s",
@@ -128,7 +132,7 @@ class ValidationService:
         """The full sandbox log written for ``validation`` (an explanatory line when none exists)."""
         if not validation.logs_path:
             return f"No logs were recorded for validation {validation.validation_id} (status {validation.status})."
-        path = Path(validation.logs_path)
+        path = resolve_workspace_path(validation.logs_path, self.settings) or Path(validation.logs_path)
         try:
             return path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -159,7 +163,7 @@ class ValidationService:
         validation.test_status = tests.status
         validation.security_scan_status = scan.status
         validation.overall_result = overall_result(build.status, tests.status, scan.status)
-        validation.logs_path = str(logs_path) if logs_path else None
+        validation.logs_path = to_workspace_relative(logs_path, self.settings) if logs_path else None
         validation.details = {
             "image": sandbox_result.image if sandbox_result else self._image_name(request),
             "container_id": sandbox_result.container_id if sandbox_result else None,
@@ -256,7 +260,7 @@ class ValidationService:
 
     def _build_request(self, validation: Validation, remediation: Remediation) -> SandboxRequest:
         change = remediation.proposed_change or {}
-        workspace = _workspace_of(change)
+        workspace = _workspace_of(change, self.settings)
         dependency = remediation.finding.dependency
         repository = remediation.finding.analysis.repository
         profile = repository.profile or {}
@@ -290,8 +294,7 @@ class ValidationService:
             raise NotFoundError(f"Remediation {remediation_id} not found")
         return remediation
 
-    @staticmethod
-    def _check_validatable(remediation: Remediation) -> None:
+    def _check_validatable(self, remediation: Remediation) -> None:
         rid = remediation.remediation_id
         if remediation.status not in VALIDATABLE_STATUSES:
             raise ValidationFailedError(
@@ -304,7 +307,7 @@ class ValidationService:
             raise ValidationFailedError(
                 f"Remediation {rid} has no proposed change to validate", details={"remediation_id": rid}
             )
-        workspace = _workspace_of(change)
+        workspace = _workspace_of(change, self.settings)
         if not workspace or not Path(workspace).is_dir():
             raise ValidationFailedError(
                 f"Remediation {rid} has no working copy on disk ({workspace or 'no workspace recorded'}); "
@@ -326,18 +329,33 @@ class ValidationService:
 
 
 def overall_result(build: str, tests: str, security: str) -> CheckResult:
-    """FAIL if any FAIL; UNKNOWN if build, tests or security is UNKNOWN; PASS otherwise (tests SKIPPED allowed)."""
+    """FAIL if any check failed; PASS only when build, tests AND security scan all passed;
+    UNKNOWN otherwise — including when the tests were SKIPPED (a skipped test suite is never
+    counted as passing, spec §14 / audit F-09; see :func:`is_partial_pass`)."""
     statuses = (build, tests, security)
     if CheckResult.FAIL in statuses:
         return CheckResult.FAIL
-    if CheckResult.UNKNOWN in statuses:
-        return CheckResult.UNKNOWN
-    return CheckResult.PASS
+    if all(status == CheckResult.PASS for status in statuses):
+        return CheckResult.PASS
+    return CheckResult.UNKNOWN
 
 
-def _workspace_of(change: dict[str, Any]) -> str | None:
+def is_partial_pass(build: str, tests: str, security: str) -> bool:
+    """Build and security scan passed but no test suite ran: the change installs and is clean
+    according to OSV, yet its behaviour is unverified (→ PARTIALLY_VALIDATED, manual testing)."""
+    return build == CheckResult.PASS and security == CheckResult.PASS and tests == CheckResult.SKIPPED
+
+
+def _workspace_of(change: dict[str, Any], settings: Settings | None = None) -> str | None:
+    """Concrete working-copy path for a stored (workspace-relative or legacy absolute) value."""
     value = change.get("workspace_path") or change.get("workspace")
-    return str(value) if value else None
+    if not value:
+        return None
+    try:
+        resolved = resolve_workspace_path(str(value), settings)
+    except ValueError:
+        return None
+    return str(resolved) if resolved else None
 
 
 def _tests_skipped_warning(tests: StepResult) -> str:
@@ -392,4 +410,4 @@ def _render_logs(
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["ValidationService", "overall_result", "TESTS_SKIPPED_WARNING", "VALIDATABLE_STATUSES"]
+__all__ = ["ValidationService", "overall_result", "is_partial_pass", "TESTS_SKIPPED_WARNING", "VALIDATABLE_STATUSES"]
