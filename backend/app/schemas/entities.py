@@ -55,6 +55,8 @@ class RepositorySummary(ORMModel):
     name: str
     source_url: str
     source_type: str
+    status: str = "READY"  # PENDING (ingesting) | READY | FAILED
+    error_message: str | None = None
     branch: str | None = None
     language: str | None = None
     commit_sha: str | None = None
@@ -142,6 +144,7 @@ class FindingSummary(ORMModel):
     impact_level: str | None = None
     risk_level: str | None = None
     ai_status: str
+    ai_updated_at: datetime | None = None
     affected_components: list[str] | None = None
     detected_at: datetime
     dependency: DependencySummary | None = None

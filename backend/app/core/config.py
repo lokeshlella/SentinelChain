@@ -60,6 +60,14 @@ class Settings(BaseSettings):
         "remaining findings can be analysed on demand.",
     )
 
+    # --- Background jobs ---------------------------------------------------
+    job_heartbeat_timeout: int = Field(
+        default=900,
+        description="Seconds without a heartbeat after which a RUNNING/PENDING job (analysis, validation, "
+        "remediation, on-demand AI, ingestion) is considered dead and marked FAILED. Raised automatically "
+        "to cover DOCKER_TIMEOUT and the LLM retry budget.",
+    )
+
     # --- GitHub ------------------------------------------------------------
     github_token: str | None = None
 

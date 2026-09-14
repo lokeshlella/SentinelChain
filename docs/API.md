@@ -18,8 +18,12 @@ All errors share one shape:
 | 502 | `ExternalServiceError` | an external service failed in a way that blocks the request |
 | 503 | `DatabaseUnavailable` | PostgreSQL cannot be reached (`Retry-After: 5`); `/health` still answers |
 
-Long-running work (analysis, sandbox validation) is started with `202 Accepted` and polled
-through `GET` until `status` is `COMPLETED` or `FAILED`.
+Long-running work never blocks a request: repository ingestion (clone/copy), analysis,
+remediation (registry + OSV + LLM), on-demand AI and sandbox validation are all started with
+`202 Accepted` and polled through `GET` until the row leaves its in-progress state
+(`PENDING`/`RUNNING`). Every job writes a heartbeat; a job whose heartbeat is older than
+`JOB_HEARTBEAT_TIMEOUT` (raised automatically to cover the sandbox and LLM budgets) is marked
+`FAILED` the next time it is read or a new job is requested — no restart needed.
 
 ## Health
 
@@ -38,7 +42,8 @@ through `GET` until `status` is `COMPLETED` or `FAILED`.
 
 | Method | Path | Body / query | Description |
 |---|---|---|---|
-| POST | `/repositories` | `{"source_url": "https://github.com/owner/repo" \| "/abs/path", "source_type"?: "github"\|"local", "branch"?: str}` | Register **and ingest** (clone / copy + structure profile + components). `201` |
+| POST | `/repositories` | `{"source_url": "https://github.com/owner/repo" \| "/abs/path", "source_type"?: "github"\|"local", "branch"?: str}` | Validate synchronously (format, duplicates → 400/409), then clone / copy + profile **in the background**. `202` with `status: PENDING`; poll until `READY` or `FAILED` (`error_message`) |
+| POST | `/repositories/{id}/ingest` | | Retry a failed ingestion or refresh the working copy. `202` |
 | GET | `/repositories` | | List with latest analysis summary and dependency counts |
 | GET | `/repositories/{id}` | | Detail: profile, components, analyses |
 | DELETE | `/repositories/{id}` | | Removes rows, workspace copy and graph nodes. `204` |
@@ -76,8 +81,8 @@ with values `PENDING | RUNNING | OK | PARTIAL | UNAVAILABLE | FAILED | SKIPPED`.
 |---|---|---|---|
 | GET | `/findings` | `?analysis_id=&risk_level=&limit=` | Findings |
 | GET | `/findings/{id}` | | Full finding: usage evidence (facts), `ai_results` (dependency analysis, impact, risk, failures, dropped components), `reasoning`, remediations |
-| POST | `/findings/{id}/analyze` | | Run the AI agents for this finding now (synchronous; used for findings skipped by the per-analysis limit) |
-| POST | `/findings/{id}/remediate` | | Generate a remediation: candidate versions (OSV + registry) → LLM recommendation → proposed change in a temporary workspace. `201` |
+| POST | `/findings/{id}/analyze` | | Run the AI agents for this finding in the background (`202`, `ai_status: RUNNING`; poll the finding; `409` while already running) |
+| POST | `/findings/{id}/remediate` | | Start a remediation in the background: candidate versions (OSV + registry) → LLM recommendation → proposed change in a temporary workspace. `202` with `status: PENDING`; pre-checks (lock-file dependency, unpinned version, missing working copy) fail synchronously with `400` |
 | GET | `/findings/{id}/report` | `?format=json\|markdown` | Evidence report (reproducible from stored data) |
 
 ## Remediations, validations, pull requests

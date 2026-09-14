@@ -8,6 +8,7 @@ services are marked ``integration`` and skipped unless SENTINEL_INTEGRATION=1.
 from __future__ import annotations
 
 import os
+import tempfile
 
 import pytest
 from sqlalchemy import create_engine
@@ -17,6 +18,10 @@ from sqlalchemy.pool import StaticPool
 from app.models import Base
 
 os.environ.setdefault("APP_ENV", "test")
+# The test session must never touch the real workspace (clones, working copies, logs) even if a
+# test forgets to override Settings: point the default workspace at a throw-away directory
+# before app.core.config is imported anywhere.
+os.environ["REPOSITORY_WORKSPACE"] = tempfile.mkdtemp(prefix="sentinel-tests-")
 
 
 def pytest_collection_modifyitems(config, items):

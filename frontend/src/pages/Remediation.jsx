@@ -126,6 +126,9 @@ export default function Remediation() {
       </div>
       {error && <ErrorBox error={error} title="Refresh failed (showing the last known state)" />}
       {rem.error_message && <div className="alert error"><strong>Remediation error:</strong> {rem.error_message}</div>}
+      {status === 'PENDING' && (
+        <div className="alert info"><span className="spinner" />Computing candidate versions (OSV + registry) and asking the local LLM for a recommendation in the background… this page refreshes automatically.</div>
+      )}
 
       <Section title="Recommendation" subtitle="The recommended version must be one of the deterministic candidates below; the agent only chooses among them.">
         <div className="upgrade">

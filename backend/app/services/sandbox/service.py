@@ -95,6 +95,7 @@ class ValidationService:
         remediation = validation.remediation
         validation.status = ValidationStatus.RUNNING
         validation.error_message = None
+        validation.heartbeat_at = utcnow()
         self.db.commit()
         started = time.monotonic()
         log.info("Validation %d running for remediation %d", validation_id, remediation.remediation_id)

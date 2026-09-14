@@ -71,6 +71,7 @@ class AnalysisPipeline:
         repository = analysis.repository
         analysis.status = AnalysisStatus.RUNNING
         analysis.started_at = utcnow()
+        self._analysis = analysis
         analysis.stages = {stage: StageStatus.PENDING for stage in STAGES}
         analysis.summary = {"repository": repository.name, "warnings": []}
         analysis.error_message = None
@@ -108,6 +109,7 @@ class AnalysisPipeline:
             return finding
         finding.ai_status = AIStatus.RUNNING
         finding.ai_error = None
+        finding.ai_updated_at = utcnow()
         self._commit()
         context = self.build_finding_context(finding)
         try:
@@ -329,6 +331,7 @@ class AnalysisPipeline:
 
     @staticmethod
     def _store_ai_result(finding: Finding, result: FindingAIResult | None, error: str | None) -> None:
+        finding.ai_updated_at = utcnow()
         if result is None:
             finding.ai_status = AIStatus.UNAVAILABLE if error and "unavailable" in error.lower() else AIStatus.FAILED
             finding.ai_error = error
@@ -371,6 +374,9 @@ class AnalysisPipeline:
         self._merge_summary(analysis, {"warnings": current + warnings})
 
     def _commit(self) -> None:
+        analysis = getattr(self, "_analysis", None)
+        if analysis is not None and analysis.status in (AnalysisStatus.PENDING, AnalysisStatus.RUNNING):
+            analysis.heartbeat_at = utcnow()  # watchdog signal: the job is alive
         self.db.commit()
 
 

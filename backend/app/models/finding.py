@@ -38,6 +38,8 @@ class Finding(Base):
     ai_results: Mapped[dict | None] = mapped_column(JSON)
     ai_status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
     ai_error: Mapped[str | None] = mapped_column(Text)
+    # Last change of ai_status (used to detect an on-demand AI job that died while RUNNING).
+    ai_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     analysis: Mapped["Analysis"] = relationship(back_populates="findings")  # noqa: F821

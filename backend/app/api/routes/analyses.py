@@ -8,6 +8,7 @@ from app.api import deps
 from app.api.serializers import analysis_summary, finding_summary, repository_summary
 from app.core.exceptions import NotFoundError
 from app.models import Analysis, Dependency, Finding
+from app.services.jobs import expire_if_stale
 from app.schemas.entities import AnalysisDetail, AnalysisSummary, DependencySummary, FindingSummary
 
 router = APIRouter(prefix="/analyses", tags=["analyses"])
@@ -29,6 +30,7 @@ def list_analyses(limit: int = Query(default=50, ge=1, le=500), db: Session = de
 @router.get("/{analysis_id}", response_model=AnalysisDetail)
 def get_analysis(analysis_id: int, db: Session = deps.DbDep):
     analysis = _get(db, analysis_id)
+    expire_if_stale(db, analysis)  # watchdog: a dead job is reported FAILED, not RUNNING forever
     base = analysis_summary(db, analysis)
     out = AnalysisDetail.model_validate(analysis)
     out.findings_count, out.dependencies_count = base.findings_count, base.dependencies_count

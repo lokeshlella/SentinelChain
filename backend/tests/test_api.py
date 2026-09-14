@@ -63,6 +63,7 @@ def client(engine, tmp_path: Path):
             session.close()
 
     app.dependency_overrides[deps.get_repository_service] = override_repo_service
+    app.dependency_overrides[deps.get_repository_service_factory] = lambda: (lambda db: RepositoryService(db, settings))
     with TestClient(app) as test_client:
         test_client.demo_path = str(make_demo_repo(tmp_path / "demo"))
         yield test_client
@@ -71,8 +72,10 @@ def client(engine, tmp_path: Path):
 
 def register(client) -> dict:
     response = client.post("/api/repositories", json={"source_url": client.demo_path, "source_type": "local"})
-    assert response.status_code == 201, response.text
-    return response.json()
+    assert response.status_code == 202, response.text  # ingestion is a background job (TestClient runs it before returning)
+    body = client.get(f"/api/repositories/{response.json()['repository_id']}").json()
+    assert body["status"] == "READY", body
+    return body
 
 
 def test_register_local_repository(client):
@@ -153,14 +156,28 @@ def test_second_analyze_while_running_is_409(client, engine):
     assert response.status_code == 409
 
 
-def test_finding_analyze_endpoint_reruns_ai(client):
+def test_finding_analyze_endpoint_runs_ai_in_background(client):
     repo = register(client)
     analysis_id = client.post(f"/api/repositories/{repo['repository_id']}/analyze", json={"run_ai": False}).json()["analysis_id"]
     finding = client.get(f"/api/analyses/{analysis_id}/findings").json()[0]
     assert finding["ai_status"] == "SKIPPED"
     response = client.post(f"/api/findings/{finding['finding_id']}/analyze")
-    assert response.status_code == 200
-    assert response.json()["ai_status"] == "COMPLETED"
+    assert response.status_code == 202 and response.json()["ai_status"] == "RUNNING"
+    # the background job ran before TestClient returned; the next read shows the outcome
+    assert client.get(f"/api/findings/{finding['finding_id']}").json()["ai_status"] == "COMPLETED"
+
+
+def test_registration_reports_a_failed_ingest_instead_of_500(client, tmp_path):
+    """The clone/copy runs in the background; a failure is visible on the row, and can be retried."""
+    empty = tmp_path / "vanishing"
+    empty.mkdir()
+    (empty / "README.md").write_text("x")
+    response = client.post("/api/repositories", json={"source_url": str(empty)})
+    assert response.status_code == 202
+    rid = response.json()["repository_id"]
+    assert client.get(f"/api/repositories/{rid}").json()["status"] == "READY"  # an empty repo still ingests
+    assert client.post(f"/api/repositories/{rid}/ingest").status_code == 202
+    assert client.get(f"/api/repositories/{rid}").json()["status"] == "READY"
 
 
 def test_delete_repository_removes_everything(client):
@@ -169,6 +186,44 @@ def test_delete_repository_removes_everything(client):
     assert client.delete(f"/api/repositories/{repo['repository_id']}").status_code == 204
     assert client.get(f"/api/repositories/{repo['repository_id']}").status_code == 404
     assert client.get("/api/dashboard").json()["repositories"] == 0
+
+
+def test_watchdog_expires_a_dead_running_analysis_on_read_and_on_new_request(client, engine):
+    """Audit F-06: a RUNNING analysis whose job died must not block the repository until a restart."""
+    from datetime import timedelta
+
+    from sqlalchemy.orm import Session
+
+    from app.db.base import utcnow
+    from app.models import Analysis
+
+    repo = register(client)
+    with Session(engine) as session:
+        dead = Analysis(repository_id=repo["repository_id"], status="RUNNING", started_at=utcnow() - timedelta(hours=3),
+                        heartbeat_at=utcnow() - timedelta(hours=3), stages={"repository": "OK", "dependencies": "RUNNING"})
+        session.add(dead)
+        session.commit()
+        dead_id = dead.analysis_id
+    detail = client.get(f"/api/analyses/{dead_id}").json()
+    assert detail["status"] == "FAILED" and "stopped reporting progress" in detail["error_message"]
+    assert detail["stages"]["dependencies"] == "FAILED"
+    # a new analysis can now be started (previously: 409 until the backend was restarted)
+    response = client.post(f"/api/repositories/{repo['repository_id']}/analyze", json={"run_ai": False})
+    assert response.status_code == 202
+    assert client.get(f"/api/analyses/{response.json()['analysis_id']}").json()["status"] == "COMPLETED"
+
+
+def test_analyze_refused_while_ingestion_pending(client, engine):
+    from sqlalchemy.orm import Session
+
+    from app.models import Repository
+
+    repo = register(client)
+    with Session(engine) as session:
+        session.get(Repository, repo["repository_id"]).status = "PENDING"
+        session.commit()
+    response = client.post(f"/api/repositories/{repo['repository_id']}/analyze", json={})
+    assert response.status_code == 409 and "ingestion" in response.json()["message"].lower()
 
 
 def test_database_unavailable_is_reported_as_503_not_500(engine):

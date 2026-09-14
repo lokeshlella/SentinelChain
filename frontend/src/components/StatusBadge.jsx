@@ -3,7 +3,7 @@ const CLASS_BY_VALUE = {
   // success
   PASS: 'ok', OK: 'ok', COMPLETED: 'ok', SAFE: 'ok', VALIDATED: 'ok', MERGED: 'ok', PR_CREATED: 'ok', NONE: 'ok',
   // in progress / not decided
-  PENDING: 'neutral', RUNNING: 'neutral', UNKNOWN: 'neutral', SKIPPED: 'neutral', UNCHECKED: 'neutral',
+  PENDING: 'neutral', RUNNING: 'neutral', INGESTING: 'neutral', READY: 'ok', UNKNOWN: 'neutral', SKIPPED: 'neutral', UNCHECKED: 'neutral',
   VALIDATING: 'neutral', PROPOSED: 'info', CLOSED: 'neutral',
   // needs attention
   PARTIAL: 'warn', PARTIALLY_VALIDATED: 'warn', UNAVAILABLE: 'warn', MEDIUM: 'warn', VALIDATION_FAILED: 'warn',

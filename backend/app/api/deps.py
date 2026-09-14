@@ -68,8 +68,43 @@ def get_repository_service(db: Session = DbDep, settings: Settings = SettingsDep
     return RepositoryService(db, settings)
 
 
+def build_repository_service(db: Session, settings: Settings | None = None) -> RepositoryService:
+    return RepositoryService(db, settings or get_settings())
+
+
+def get_repository_service_factory() -> Callable[[Session], RepositoryService]:
+    """Factory for background ingestion jobs (overridden in tests)."""
+    return build_repository_service
+
+
 def get_graph_service() -> KnowledgeGraphService:
     return KnowledgeGraphService()
+
+
+def _run_job(label: str, session_maker: sessionmaker[Session], work) -> None:
+    """Run ``work(db)`` in its own session; a crash is logged, never propagated."""
+    db = session_maker()
+    try:
+        work(db)
+    except Exception:  # noqa: BLE001 - never let a background job die silently
+        log.exception("%s crashed", label)
+    finally:
+        db.close()
+
+
+def run_ingest_job(repository_id: int, *, refresh: bool, session_maker: sessionmaker[Session], repository_factory) -> None:
+    """Background task: clone/copy + profile a repository (F-05: never on the request thread)."""
+    _run_job(f"Ingestion job {repository_id}", session_maker, lambda db: repository_factory(db).ingest_job(repository_id, refresh=refresh))
+
+
+def run_remediation_job(remediation_id: int, *, session_maker: sessionmaker[Session], remediation_factory) -> None:
+    """Background task: candidates → LLM → working-copy change for one PENDING remediation."""
+    _run_job(f"Remediation job {remediation_id}", session_maker, lambda db: remediation_factory(db).run(remediation_id))
+
+
+def run_finding_ai_job(finding_id: int, *, session_maker: sessionmaker[Session], pipeline_factory) -> None:
+    """Background task: on-demand agent chain for one finding."""
+    _run_job(f"AI job for finding {finding_id}", session_maker, lambda db: pipeline_factory(db).run_ai_for_finding(finding_id))
 
 
 def run_analysis_job(

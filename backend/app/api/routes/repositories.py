@@ -15,7 +15,8 @@ from app.api.serializers import (
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.logging import get_stage_logger
 from app.models import Analysis, Dependency, Finding
-from app.models.enums import AnalysisStatus
+from app.models.enums import AnalysisStatus, RepositoryStatus
+from app.services.jobs import expire_if_stale
 from app.schemas.entities import (
     AnalysisDetail,
     AnalysisSummary,
@@ -33,14 +34,45 @@ router = APIRouter(prefix="/repositories", tags=["repositories"])
 log = get_stage_logger("API")
 
 
-@router.post("", response_model=RepositoryDetail, status_code=status.HTTP_201_CREATED, summary="Register and ingest a repository")
+@router.post("", response_model=RepositoryDetail, status_code=status.HTTP_202_ACCEPTED, summary="Register a repository (ingestion runs in the background)")
 def create_repository(
     payload: RepositoryCreate,
+    background: BackgroundTasks,
     db: Session = deps.DbDep,
     service: RepositoryService = Depends(deps.get_repository_service),
+    session_maker=Depends(deps.get_session_maker),
+    repository_factory=Depends(deps.get_repository_service_factory),
 ) -> RepositoryDetail:
-    repository = service.register(payload.source_url, payload.source_type, payload.branch)
-    log.info("Repository %d registered: %s", repository.repository_id, repository.source_url)
+    """Validates the source (URL/path format, duplicates) synchronously; the clone/copy and the
+    structure profile run as a background job. Poll ``GET /repositories/{id}`` until ``status``
+    is ``READY`` (or ``FAILED`` with ``error_message``)."""
+    repository = service.register(payload.source_url, payload.source_type, payload.branch, ingest=False)
+    background.add_task(
+        deps.run_ingest_job, repository.repository_id, refresh=True, session_maker=session_maker, repository_factory=repository_factory
+    )
+    log.info("Repository %d registered: %s (ingestion queued)", repository.repository_id, repository.source_url)
+    return repository_detail(db, repository)
+
+
+@router.post("/{repository_id}/ingest", response_model=RepositoryDetail, status_code=status.HTTP_202_ACCEPTED, summary="Re-run ingestion (retry a failed clone/copy or refresh the working copy)")
+def ingest_repository(
+    repository_id: int,
+    background: BackgroundTasks,
+    db: Session = deps.DbDep,
+    service: RepositoryService = Depends(deps.get_repository_service),
+    session_maker=Depends(deps.get_session_maker),
+    repository_factory=Depends(deps.get_repository_service_factory),
+) -> RepositoryDetail:
+    repository = service.get(repository_id)
+    expire_if_stale(db, repository)
+    if repository.status == RepositoryStatus.PENDING:
+        raise ConflictError("Ingestion is already in progress for this repository", details={"repository_id": repository_id})
+    repository.status = RepositoryStatus.PENDING
+    repository.error_message = None
+    db.commit()
+    background.add_task(
+        deps.run_ingest_job, repository.repository_id, refresh=True, session_maker=session_maker, repository_factory=repository_factory
+    )
     return repository_detail(db, repository)
 
 
@@ -51,7 +83,9 @@ def list_repositories(db: Session = deps.DbDep, service: RepositoryService = Dep
 
 @router.get("/{repository_id}", response_model=RepositoryDetail)
 def get_repository(repository_id: int, db: Session = deps.DbDep, service: RepositoryService = Depends(deps.get_repository_service)):
-    return repository_detail(db, service.get(repository_id))
+    repository = service.get(repository_id)
+    expire_if_stale(db, repository)  # a dead ingestion job becomes FAILED instead of PENDING forever
+    return repository_detail(db, repository)
 
 
 @router.delete("/{repository_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -128,12 +162,20 @@ def analyze_repository(
 ) -> AnalysisDetail:
     payload = payload or AnalyzeRequest()
     repository = service.get(repository_id)
+    expire_if_stale(db, repository)
+    if repository.status == RepositoryStatus.PENDING:
+        raise ConflictError(
+            "Repository ingestion is still in progress; wait until its status is READY",
+            details={"repository_id": repository_id, "status": repository.status},
+        )
     running = db.scalar(
         select(Analysis).where(
             Analysis.repository_id == repository_id,
             Analysis.status.in_([AnalysisStatus.PENDING, AnalysisStatus.RUNNING]),
         )
     )
+    if running is not None and expire_if_stale(db, running):
+        running = None  # the previous job died; the watchdog just marked it FAILED
     if running is not None:
         raise ConflictError(
             f"Analysis {running.analysis_id} is already {running.status} for this repository",
