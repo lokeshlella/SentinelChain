@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_prefix: str = "/api"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
+    api_key: str | None = Field(
+        default=None,
+        description="When set, every /api request except the health endpoints must carry it in the "
+        "X-API-Key header (or ?api_key=). Leave empty for a local single-user setup.",
+    )
 
     # --- PostgreSQL --------------------------------------------------------
     database_url: str = "postgresql+psycopg://sentinel:sentinel@localhost:5432/sentinelchain"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy import JSON, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, utcnow
@@ -38,4 +38,11 @@ class Repository(Base):
     )
     analyses: Mapped[list["Analysis"]] = relationship(  # noqa: F821
         back_populates="repository", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        # Database-level backstop for the code-side duplicate check (audit F-14): one row per
+        # source (case-insensitive) and branch; a NULL branch counts as ''. Concurrent registrations
+        # of the same source now fail with an IntegrityError that the service maps to ConflictError.
+        Index("uq_repositories_source_branch", func.lower(source_url), func.coalesce(branch, ""), unique=True),
     )

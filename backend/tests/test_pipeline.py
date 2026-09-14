@@ -142,7 +142,11 @@ def test_ai_limit_skips_remaining_findings_and_on_demand_run_fills_them(db, sett
     db.refresh(analysis)
     statuses = sorted(f.ai_status for f in analysis.findings)
     assert statuses == [AIStatus.COMPLETED, AIStatus.SKIPPED]
-    assert analysis.stages["ai"] == StageStatus.PARTIAL
+    # audit F-19: every attempted finding completed → OK; the cap is reported separately, not as PARTIAL
+    assert analysis.stages["ai"] == StageStatus.OK
+    ai = analysis.summary["ai"]
+    assert ai["attempted"] == 1 and ai["completed"] == 1 and ai["skipped_by_limit"] == 1
+    assert "per-run limit of 1" in ai["note"]
     skipped = next(f for f in analysis.findings if f.ai_status == AIStatus.SKIPPED)
     assert "limit (1)" in skipped.ai_error
     pipeline.run_ai_for_finding(skipped.finding_id)

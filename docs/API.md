@@ -3,6 +3,10 @@
 Base URL: `http://localhost:8000/api` — interactive documentation at `http://localhost:8000/docs`
 (OpenAPI / Swagger UI) and `/redoc`.
 
+Authentication is optional: when `API_KEY` is set in `.env`, every `/api` request except the
+health endpoints must send it as `X-API-Key` (or `?api_key=`); the frontend reads
+`VITE_API_KEY`. Leave it unset for a local single-user setup.
+
 All errors share one shape:
 
 ```json
@@ -15,7 +19,9 @@ All errors share one shape:
 | 404 | `NotFoundError` | unknown id |
 | 409 | `ConflictError` | duplicate repository, analysis already running, PR on a failed validation |
 | 422 | `UnsupportedProjectError` / request validation | no supported dependency files, malformed body |
+| 401 | `Unauthorized` | `API_KEY` is configured and the request carried no/invalid `X-API-Key` |
 | 502 | `ExternalServiceError` | an external service failed in a way that blocks the request |
+| 502 | (PullRequest body) | `POST …/pull-request`: GitHub refused (auth/push/API); the record with `error_message` and manual instructions is returned |
 | 503 | `DatabaseUnavailable` | PostgreSQL cannot be reached (`Retry-After: 5`); `/health` still answers |
 
 Long-running work never blocks a request: repository ingestion (clone/copy), analysis,
@@ -29,7 +35,7 @@ remediation (registry + OSV + LLM), on-demand AI and sandbox validation are all 
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/health` | Status of PostgreSQL, Neo4j, Ollama (model present), Docker, GitHub token |
+| GET | `/health` | Status of PostgreSQL, Neo4j, Ollama (model present), Docker, GitHub token (presence **and** validity via `GET /user`) |
 | GET | `/health/live` | Liveness probe |
 
 ## Dashboard
@@ -93,7 +99,7 @@ with values `PENDING | RUNNING | OK | PARTIAL | UNAVAILABLE | FAILED | SKIPPED`.
 | POST | `/remediations/{id}/validate` | | Start Docker sandbox validation in the background. `202` with the `Validation` |
 | GET | `/remediations/{id}/validations` | | Validations of the remediation |
 | GET | `/remediations/{id}/report` | `?format=` | Evidence report for this remediation |
-| POST | `/remediations/{id}/pull-request` | `{"force"?: false}` | Create a **draft** GitHub PR from a validated (or partially validated) workspace; `force` allows a failed/unknown validation. `201` |
+| POST | `/remediations/{id}/pull-request` | `{"force"?: false}` | Create a **draft** GitHub PR from a validated (or partially validated) workspace; `force` allows a failed/unknown validation. `201` when the PR was opened, `200` when only prepared (no token / not a GitHub repo), `502` when GitHub refused — the body is always the PR record |
 | GET | `/validations/{id}` | | build / test / security / overall results, step details, logs |
 | GET | `/validations/{id}/logs` | | Raw sandbox logs (`text/plain`) |
 | GET | `/pull-requests` | | All pull requests |

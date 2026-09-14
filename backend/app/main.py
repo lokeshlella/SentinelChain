@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -58,10 +59,30 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
+    allow_credentials=False,  # no cookies/sessions are used; keep the CORS surface minimal (audit F-17)
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def api_key_guard(request: Request, call_next):
+    """Optional shared-secret authentication (audit F-17).
+
+    The API clones arbitrary URLs and starts containers; when it is exposed beyond localhost,
+    set API_KEY and send it as ``X-API-Key`` (or ``?api_key=``). Health endpoints stay open
+    so orchestrators can probe them; the interactive docs stay reachable but calls need the key.
+    """
+    expected = settings.api_key
+    path = request.url.path
+    if expected and path.startswith(settings.api_prefix) and not path.startswith(f"{settings.api_prefix}/health"):
+        provided = request.headers.get("x-api-key") or request.query_params.get("api_key")
+        if not provided or not secrets.compare_digest(provided, expected):
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Unauthorized", "message": "A valid X-API-Key header is required", "details": {}},
+            )
+    return await call_next(request)
 
 
 @app.exception_handler(SentinelError)

@@ -147,7 +147,15 @@ class ValidationService:
         warnings: list[str] = []
         sandbox_result, sandbox_error = self._run_sandbox(request)
         artifacts_written = self._write_artifacts(request.workspace_path, sandbox_result, warnings)
-        scan = self._run_scan(request, dependency.package_name, new_version)
+        if sandbox_result is None:
+            # The sandbox never ran (Docker unavailable, ...): a PASS from the security scan would
+            # sit next to two UNKNOWN steps and read as reassurance (audit F-11); report UNKNOWN.
+            scan = SecurityScanResult(
+                status=CheckResult.UNKNOWN, provider_available=False,
+                notes=["security scan not run: the sandbox could not be started", *( [sandbox_error] if sandbox_error else [] )],
+            )
+        else:
+            scan = self._run_scan(request, dependency.package_name, new_version)
         logs_path = self._write_logs(validation, request, sandbox_result, sandbox_error, scan)
 
         build = sandbox_result.build if sandbox_result else _unknown_step("build", sandbox_error)

@@ -364,8 +364,13 @@ class GitHubProvider(GitProvider):
             message = self._github_message(exc)
             lowered = message.lower()
             if exc.status == 422 and spec.draft and _DRAFT_UNSUPPORTED_MARKER in lowered:
-                log.info("Draft pull requests are not supported on this repository; retrying as a regular PR")
-                return self._api_call(lambda: gh_repo.create_pull(**{**kwargs, "draft": False}), "create pull request")
+                # Spec §17: default to a DRAFT PR. Opening a regular PR instead would silently
+                # weaken that guarantee (audit F-12) — fail with manual instructions instead.
+                raise _PullRequestFailure(
+                    "GitHub does not support draft pull requests on this repository (plan/visibility limitation); "
+                    "Sentinel Chain never opens non-draft pull requests. The branch was pushed — open the pull "
+                    "request manually and mark it as a draft if possible."
+                ) from None
             if exc.status == 422 and _PR_EXISTS_MARKER in lowered:
                 existing = self._existing_pull(gh_repo, owner, spec.head_branch)
                 if existing is not None:

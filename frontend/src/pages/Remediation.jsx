@@ -81,6 +81,12 @@ export default function Remediation() {
       const pr = await api.post(`/remediations/${id}/pull-request`, { force })
       navigate(`/pull-requests/${pr.pr_id}`)
     } catch (e) {
+      // 502 = GitHub refused, but the PR record (with the error and manual instructions) exists:
+      // show it instead of a bare error.
+      if (e?.data?.pr_id) {
+        navigate(`/pull-requests/${e.data.pr_id}`)
+        return
+      }
       setPrError(e)
       setPrBusy(false)
     }

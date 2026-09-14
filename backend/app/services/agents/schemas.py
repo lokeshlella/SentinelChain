@@ -19,12 +19,13 @@ Confidence = float
 
 
 def _clamp(value: Any) -> float:
-    """Coerce a model-supplied confidence to a float in ``[0, 1]``.
+    """Validate a model-supplied confidence: a finite number in ``[0, 1]``.
 
-    Anything that is not a (finite) number — ``null``, a list, an object, a
-    non-numeric string — raises ``ValueError`` so Pydantic reports it as a
-    regular ``ValidationError`` naming the field; the structured-output layer
-    then re-prompts the model instead of crashing on a ``TypeError``.
+    Anything else — ``null``, a list, an object, a non-numeric string, or a value
+    outside the range (e.g. a percentage such as ``90``) — raises ``ValueError``
+    so Pydantic reports it as a regular ``ValidationError`` naming the field and
+    the structured-output layer re-prompts the model. Nothing is silently
+    normalised (audit F-15): a "90" clamped to 1.0 would look maximally confident.
     """
     try:
         number = float(value)
@@ -33,7 +34,9 @@ def _clamp(value: Any) -> float:
         raise ValueError(f"must be a number between 0 and 1, got {given}") from exc
     if math.isnan(number) or math.isinf(number):
         raise ValueError("must be a finite number between 0 and 1")
-    return max(0.0, min(1.0, number))
+    if number < 0.0 or number > 1.0:
+        raise ValueError(f"must be between 0 and 1 (a fraction, not a percentage), got {number:g}")
+    return number
 
 
 # ---------------------------------------------------------------- context (input) models

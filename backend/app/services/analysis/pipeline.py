@@ -257,7 +257,9 @@ class AnalysisPipeline:
         for finding in skipped:
             finding.ai_status = AIStatus.SKIPPED
             finding.ai_error = f"Skipped: analysis limit ({limit}) reached — run on demand"
-        counts = {"analyzed": 0, "completed": 0, "failed": 0, "unavailable": 0, "skipped": len(skipped), "limit": limit}
+        # attempted = findings actually sent to the model; unavailable = not attempted because the
+        # provider was down; skipped_by_limit = not attempted because of the per-run cap (F-19).
+        counts = {"attempted": 0, "completed": 0, "failed": 0, "unavailable": 0, "skipped_by_limit": len(skipped), "limit": limit}
         model = None
         unavailable_reason: str | None = None
         for finding in selected:
@@ -269,6 +271,7 @@ class AnalysisPipeline:
             self._commit()
             context = self.build_finding_context(finding)
             started = time.monotonic()
+            counts["attempted"] += 1
             try:
                 result = self.orchestrator.analyze_finding(context)
             except Exception as exc:  # noqa: BLE001
@@ -276,7 +279,6 @@ class AnalysisPipeline:
                 self._store_ai_result(finding, None, f"AI analysis failed: {exc}")
                 counts["failed"] += 1
                 continue
-            counts["analyzed"] += 1
             model = result.model or model
             self._store_ai_result(finding, result, None)
             ai_log.info(
@@ -285,6 +287,7 @@ class AnalysisPipeline:
                 context.vulnerability.identifier, result.status, time.monotonic() - started,
             )
             if result.status == "UNAVAILABLE":
+                counts["attempted"] -= 1  # the provider never answered: not a real attempt
                 counts["unavailable"] += 1
                 unavailable_reason = "AI analysis unavailable: " + (result.failures[0].error if result.failures else "LLM unreachable")
             elif result.status == "FAILED":
@@ -293,11 +296,19 @@ class AnalysisPipeline:
                 counts["completed"] += 1
             self._commit()
 
-        self._merge_summary(analysis, {"ai": {**counts, "model": model}})
+        note = None
+        if counts["skipped_by_limit"]:
+            note = (
+                f"{counts['skipped_by_limit']} finding(s) not analysed: per-run limit of {limit} reached "
+                "(AI_MAX_FINDINGS_PER_ANALYSIS); run them on demand from the finding page"
+            )
+        self._merge_summary(analysis, {"ai": {**counts, "model": model, "note": note}})
         if counts["completed"] == 0 and counts["unavailable"] > 0:
             self._add_warnings(analysis, [unavailable_reason or "AI analysis unavailable"])
             self._set_stage(analysis, "ai", StageStatus.UNAVAILABLE)
-        elif counts["failed"] or counts["unavailable"] or counts["skipped"]:
+        elif counts["failed"] or counts["unavailable"]:
+            # Some attempted findings did not complete: PARTIAL. Findings skipped only by the cap do
+            # not degrade the stage — every attempted one succeeded (audit F-19).
             self._set_stage(analysis, "ai", StageStatus.PARTIAL)
         else:
             self._set_stage(analysis, "ai", StageStatus.OK)

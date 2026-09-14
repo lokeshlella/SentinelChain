@@ -111,7 +111,8 @@ tests + 20 integration tests, all passing._
   isolated from the host (non-root, read-only rootfs, no capabilities, no mounts) but not from
   the internet unless `DOCKER_SANDBOX_NETWORK=none` is used for vendored projects.
 * OSV data changes over time — the demo README documents how to re-verify the advisory ids.
-* No authentication: the API is meant for a local, single-user setup.
+* Authentication is an optional shared secret (`API_KEY` / `X-API-Key`); the API is meant for a
+  local, single-user setup.
 * Path-based local repositories are copied entirely (minus build artefacts); very large
   repositories take time and disk.
 

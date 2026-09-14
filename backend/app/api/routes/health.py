@@ -39,10 +39,26 @@ def _check_docker() -> tuple[bool, str]:
 
 
 def _check_github() -> tuple[bool, str]:
+    """Token presence AND validity: GitHub accepts an invalid token for public clones, so a bad
+    token would otherwise only surface at PR time (audit F-16)."""
     settings = get_settings()
     if not settings.github_token:
         return False, "GITHUB_TOKEN not configured (PR creation unavailable)"
-    return True, "token configured"
+    try:
+        response = httpx.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"Bearer {settings.github_token}", "Accept": "application/vnd.github+json"},
+            timeout=5,
+        )
+    except Exception as exc:  # noqa: BLE001 - offline: the token is configured, just not verifiable now
+        return True, f"token configured (GitHub not reachable to verify it: {exc.__class__.__name__})"
+    if response.status_code == 200:
+        login = response.json().get("login", "?")
+        scopes = response.headers.get("x-oauth-scopes")
+        return True, f"token valid for GitHub user '{login}'" + (f" (scopes: {scopes})" if scopes else "")
+    if response.status_code in (401, 403):
+        return False, f"GITHUB_TOKEN rejected by GitHub (HTTP {response.status_code}); PR creation will fail"
+    return True, f"token configured (GitHub answered HTTP {response.status_code} while verifying)"
 
 
 @router.get("/health", response_model=HealthResponse, summary="Liveness + dependency health")

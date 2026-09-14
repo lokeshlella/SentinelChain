@@ -209,7 +209,12 @@ def test_long_previous_output_is_truncated_in_correction_prompt():
     assert correction.count("x") < 2000
 
 
-def test_confidence_is_clamped_by_the_output_model_not_the_parser():
-    provider = FakeLLMProvider([{"reasoning": "r", "recommended_version": "1.2.3", "confidence": 1.7}])
-    result = generate_structured(provider, "P", None, RemediationResult, max_retries=0)
-    assert result.confidence == 1.0 and result.recommended_version == "1.2.3"
+def test_out_of_range_confidence_triggers_a_correction_round_not_a_clamp():
+    """Audit F-15: 1.7 (or a percentage like 90) must not be silently normalised to 1.0."""
+    provider = FakeLLMProvider([
+        {"reasoning": "r", "recommended_version": "1.2.3", "confidence": 1.7},
+        {"reasoning": "r", "recommended_version": "1.2.3", "confidence": 0.7},
+    ])
+    result = generate_structured(provider, "P", None, RemediationResult, max_retries=1)
+    assert result.confidence == 0.7 and len(provider.calls) == 2
+    assert "between 0 and 1" in provider.calls[1].prompt
