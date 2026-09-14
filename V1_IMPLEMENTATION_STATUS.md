@@ -61,9 +61,11 @@ tests + 20 integration tests, all passing._
   (formatting preserved), temporary working copies, deterministic fallback when the LLM is
   unavailable, remediation history per finding.
 * **Docker sandbox** — `DockerSandboxProvider` (no host mounts, `cap_drop ALL`,
-  `no-new-privileges`, memory/CPU/pid limits, timeout kill, step markers, log capture,
-  lock-file artifact copy-back, guaranteed container removal), `DependencySecurityScanner`,
-  `ValidationService` with the documented `overall_result` rules.
+  `no-new-privileges`, memory/CPU/pid limits, one `docker exec` per step with the exit code
+  taken from the daemon, host-side deadline that kills the container and marks unfinished
+  steps `UNKNOWN`, host-assembled logs, lock-file artifact copy-back, guaranteed container
+  removal), `DependencySecurityScanner`, `ValidationService` with the documented
+  `overall_result` rules.
 * **Evidence report** — `ReportService` (10 sections, facts / AI reasoning / recommendations /
   validation results kept apart, deterministic final recommendation, JSON + Markdown files).
 * **GitHub PR** — `GitHubProvider` (branch, commit as *Sentinel Chain*, one-off token URL push
@@ -72,6 +74,9 @@ tests + 20 integration tests, all passing._
   vulnerability / versions / impact / risk / validation / diff / checklist, manual instructions).
 * **API & UI** — 33 REST endpoints with typed errors, background execution + polling; React
   dashboard covering the whole workflow, facts and inferences labelled everywhere.
+* **Working-copy hardening** — `repository/git_safety.py`: hooks are never copied,
+  `.git/config` is reduced to an allow-list, `.git` symlinks/gitdir pointers are severed, and
+  all git commands run with hook/fsmonitor/helper overrides and `--no-verify` (audit F-02).
 * **Operations** — health endpoint for every backing service, stage-prefixed logs, startup sweep
   that fails jobs interrupted by a restart, Docker Compose for PostgreSQL / Neo4j / backend /
   frontend (`full` profile) with Ollama on the host.

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.core.exceptions import RepositoryError
 from app.core.logging import get_stage_logger
+from app.services.repository.git_safety import harden_git_dir
 from app.services.repository.ignore import copytree_ignore
 
 log = get_stage_logger("Remediation")
@@ -26,6 +27,8 @@ def create_working_copy(source: Path | str, destination: Path | str) -> Path:
         shutil.rmtree(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dest, symlinks=True, ignore=copytree_ignore([dest]))
+    for note in harden_git_dir(dest):
+        log.info("Working copy %s: %s", dest, note)
     log.info("Working copy created at %s", dest)
     return dest
 

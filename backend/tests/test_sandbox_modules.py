@@ -11,18 +11,18 @@ from app.core.exceptions import ValidationFailedError
 from app.models import Analysis, Dependency, Finding, Remediation, Repository, Vulnerability
 from app.models.enums import CheckResult, RemediationStatus, ValidationStatus, VulnerabilityStatus
 from app.services.sandbox.base import SandboxError, SandboxRequest, SandboxResult, StepResult
-from app.services.sandbox.docker_provider import DockerSandboxProvider, build_script, parse_step_markers
+from app.services.sandbox.docker_provider import KEEPALIVE_COMMAND, DockerSandboxProvider, build_plan
 from app.services.sandbox.security_scan import DependencySecurityScanner
 from app.services.sandbox.service import ValidationService, overall_result
 from app.services.vulnerabilities.base import PackageQuery, PackageVulnerabilityResult
 from tests.fixtures.api_fakes import requests_record
 from tests.fixtures.sandbox.fake_docker import (
-    FAILING_BUILD_LOGS,
-    FAILING_TESTS_LOGS,
-    PASSING_PYTHON_LOGS,
-    SKIPPED_TESTS_LOGS,
-    TIMEOUT_DURING_TESTS_LOGS,
+    NPM_INSTALL_OK,
+    PIP_INSTALL_FAIL,
+    PIP_INSTALL_OK,
+    PYTEST_OK,
     FakeDockerClient,
+    tar_names,
 )
 
 
@@ -42,34 +42,33 @@ def python_workspace(tmp_path: Path) -> Path:
     return ws
 
 
-# ---------------------------------------------------------------- pure helpers
+def request(tmp_path: Path, timeout: int = 30) -> SandboxRequest:
+    return SandboxRequest(workspace_path=python_workspace(tmp_path), ecosystem="PyPI", dependency_file="requirements.txt", timeout_seconds=timeout)
 
 
-def test_parse_step_markers_covers_pass_fail_skip_and_timeout():
-    assert parse_step_markers(PASSING_PYTHON_LOGS)["build"] == 0 and parse_step_markers(PASSING_PYTHON_LOGS)["tests"] == 0
-    failing = parse_step_markers(FAILING_BUILD_LOGS)
-    assert failing["build"] == 1 and failing["tests"] is None and "build failed" in failing["tests_skipped_reason"]
-    assert parse_step_markers(FAILING_TESTS_LOGS)["tests"] == 1
-    skipped = parse_step_markers(SKIPPED_TESTS_LOGS)
-    assert skipped["tests"] is None and "no test script" in skipped["tests_skipped_reason"]
-    timeout = parse_step_markers(TIMEOUT_DURING_TESTS_LOGS)
-    assert timeout["build"] == 0 and timeout["tests"] is None and timeout["tests_skipped_reason"] is None
+# ---------------------------------------------------------------- plans and rules
 
 
-def test_script_builders_detect_tests(tmp_path):
+def test_plan_builders_detect_tests(tmp_path):
     ws = python_workspace(tmp_path)
-    script = build_script(SandboxRequest(workspace_path=ws, ecosystem="PyPI", dependency_file="requirements.txt"))
-    assert "pip install" in script.text and "pytest" in script.text and script.test_command
+    plan = build_plan(SandboxRequest(workspace_path=ws, ecosystem="PyPI", dependency_file="requirements.txt"))
+    assert "pip install" in plan.build_command and plan.test_command and "pytest" in plan.test_command
     empty = tmp_path / "ws-empty"
     empty.mkdir()
     (empty / "requirements.txt").write_text("requests==2.33.0\n")
-    script2 = build_script(SandboxRequest(workspace_path=empty, ecosystem="PyPI", dependency_file="requirements.txt"))
-    assert script2.test_command is None and script2.tests_skipped_reason
+    plan2 = build_plan(SandboxRequest(workspace_path=empty, ecosystem="PyPI", dependency_file="requirements.txt"))
+    assert plan2.test_command is None and plan2.tests_skipped_reason
     node = tmp_path / "ws-node"
     node.mkdir()
     (node / "package.json").write_text('{"scripts": {"test": "echo \\"Error: no test specified\\" && exit 1"}}')
-    script3 = build_script(SandboxRequest(workspace_path=node, ecosystem="npm", dependency_file="package.json"))
-    assert "npm install" in script3.text and script3.test_command is None
+    plan3 = build_plan(SandboxRequest(workspace_path=node, ecosystem="npm", dependency_file="package.json"))
+    assert "npm install" in plan3.build_command and plan3.test_command is None
+
+
+def test_plan_quotes_repository_controlled_file_names(tmp_path):
+    ws = python_workspace(tmp_path)
+    plan = build_plan(SandboxRequest(workspace_path=ws, ecosystem="PyPI", dependency_file="requirements-$(touch /tmp/pwned).txt"))
+    assert "-r 'requirements-$(touch /tmp/pwned).txt'" in plan.build_command
 
 
 def test_overall_result_rules():
@@ -84,46 +83,87 @@ def test_overall_result_rules():
 # ---------------------------------------------------------------- provider with the fake client
 
 
-def test_provider_runs_isolated_container_and_cleans_up(tmp_path):
-    client = FakeDockerClient(logs=PASSING_PYTHON_LOGS)
-    provider = DockerSandboxProvider(settings(tmp_path), client=client)
-    result = provider.run(SandboxRequest(workspace_path=python_workspace(tmp_path), ecosystem="PyPI", dependency_file="requirements.txt", timeout_seconds=30))
-    assert result.build.status == CheckResult.PASS and result.tests.status == CheckResult.PASS
+def test_provider_runs_each_step_as_an_exec_and_cleans_up(tmp_path):
+    client = FakeDockerClient()
+    result = DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path))
+    assert result.build.status == CheckResult.PASS and result.build.exit_code == 0
+    assert result.tests.status == CheckResult.PASS and "17 passed" in result.tests.output_tail
     assert result.image == "python:3.12-slim" and not result.timed_out
-    container = client.containers.created[0]
+    container = client.last_container
+    assert container.kwargs["command"] == list(KEEPALIVE_COMMAND)  # the container itself does no work
+    assert [e["cmd"][0:2] for e in container.execs] == [["sh", "-c"], ["sh", "-c"]]
+    assert "pip install" in container.execs[0]["cmd"][2] and "pytest" in container.execs[1]["cmd"][2]
+    assert all(e["workdir"] == "/workspace" for e in container.execs)
     kwargs = container.kwargs
     assert kwargs["cap_drop"] == ["ALL"] and "no-new-privileges" in kwargs["security_opt"]
     assert kwargs.get("pids_limit") == 512 and kwargs.get("mem_limit")
     assert not any(k in kwargs for k in ("volumes", "mounts", "privileged"))
     assert container.removed == {"force": True}
-    from tests.fixtures.sandbox.fake_docker import tar_names
-
     names = [n for _, data in container.archives for n in tar_names(data)]
     assert any(n.endswith("requirements.txt") for n in names) and not any("node_modules" in n for n in names)
+    assert "### step build" in result.logs and "[exit 0" in result.logs
 
 
-def test_provider_reports_build_failure_and_skipped_tests(tmp_path):
-    provider = DockerSandboxProvider(settings(tmp_path), client=FakeDockerClient(logs=FAILING_BUILD_LOGS))
-    result = provider.run(SandboxRequest(workspace_path=python_workspace(tmp_path), ecosystem="PyPI", dependency_file="requirements.txt"))
+def test_exit_code_comes_from_the_daemon_not_from_output(tmp_path):
+    """Output that *says* success is irrelevant: the daemon-reported exit code decides."""
+    client = FakeDockerClient(exec_results={"build": (0, PIP_INSTALL_OK), "tests": (1, b"17 passed in 0.10s\n::step tests end 0 1\n")})
+    result = DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path))
+    assert result.tests.status == CheckResult.FAIL and result.tests.exit_code == 1
+
+
+def test_provider_reports_build_failure_and_skips_tests(tmp_path):
+    client = FakeDockerClient(exec_results={"build": (1, PIP_INSTALL_FAIL)})
+    result = DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path))
     assert result.build.status == CheckResult.FAIL and result.build.exit_code == 1
     assert result.tests.status == CheckResult.SKIPPED and "build failed" in (result.tests.note or "")
+    assert len(client.last_container.execs) == 1  # tests were never exec'd
 
 
-def test_provider_timeout_kills_container_and_marks_unknown(tmp_path):
-    client = FakeDockerClient(logs=TIMEOUT_DURING_TESTS_LOGS, wait_timeout=True)
-    provider = DockerSandboxProvider(settings(tmp_path), client=client)
-    result = provider.run(SandboxRequest(workspace_path=python_workspace(tmp_path), ecosystem="PyPI", dependency_file="requirements.txt", timeout_seconds=1))
-    assert result.timed_out and result.tests.status == CheckResult.UNKNOWN
-    assert client.containers.created[0].killed and client.containers.created[0].removed
+def test_forged_success_markers_plus_hang_never_pass(tmp_path):
+    """Audit F-01: the repository's tests print fake success markers and then hang until the
+    deadline. The kill must win — tests UNKNOWN, overall not PASS — regardless of the output."""
+    forged = b"::step build end 0 2\n::step tests end 0 3\n17 passed\n"
+    client = FakeDockerClient(exec_results={"build": (0, PIP_INSTALL_OK)}, hang_on={"tests"}, hang_output=forged)
+    result = DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path, timeout=1))
+    assert result.timed_out
+    assert result.build.status == CheckResult.PASS  # really finished before the deadline
+    assert result.tests.status == CheckResult.UNKNOWN and "timed out" in (result.tests.note or "")
+    assert overall_result(result.build.status, result.tests.status, "PASS") == CheckResult.UNKNOWN
+    container = client.last_container
+    assert container.killed and container.removed == {"force": True}
+    assert "[killed: deadline" in result.logs
+
+
+def test_timeout_during_build_leaves_both_steps_unknown(tmp_path):
+    client = FakeDockerClient(hang_on={"build"})
+    result = DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path, timeout=1))
+    assert result.timed_out and result.build.status == CheckResult.UNKNOWN and result.tests.status == CheckResult.UNKNOWN
+    assert len(client.last_container.execs) == 1 and client.last_container.killed
+
+
+def test_exec_transport_failure_is_a_sandbox_error(tmp_path):
+    client = FakeDockerClient(exec_error=RuntimeError("daemon went away"))
+    with pytest.raises(SandboxError):
+        DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path))
+    assert client.last_container.removed == {"force": True}
+
+
+def test_npm_lock_file_is_copied_back(tmp_path):
+    ws = tmp_path / "ws-node"
+    ws.mkdir()
+    (ws / "package.json").write_text('{"scripts": {"test": "node --test"}, "dependencies": {"lodash": "4.18.1"}}')
+    client = FakeDockerClient(exec_results={"build": (0, NPM_INSTALL_OK), "tests": (0, b"ok\n")}, archive_files={"package-lock.json": b'{"lockfileVersion": 3}'})
+    result = DockerSandboxProvider(settings(tmp_path), client=client).run(SandboxRequest(workspace_path=ws, ecosystem="npm", dependency_file="package.json"))
+    assert result.tests.status == CheckResult.PASS and result.artifacts == {"package-lock.json": '{"lockfileVersion": 3}'}
 
 
 def test_provider_pulls_missing_image_and_raises_sandbox_error_when_docker_is_down(tmp_path):
     client = FakeDockerClient(images_present=())
-    DockerSandboxProvider(settings(tmp_path), client=client).run(SandboxRequest(workspace_path=python_workspace(tmp_path), ecosystem="PyPI", dependency_file="requirements.txt"))
+    DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path))
     assert "python:3.12-slim" in client.images.pulled
     down = FakeDockerClient(create_error=RuntimeError("Cannot connect to the Docker daemon"))
     with pytest.raises(SandboxError):
-        DockerSandboxProvider(settings(tmp_path), client=down).run(SandboxRequest(workspace_path=python_workspace(tmp_path), ecosystem="PyPI", dependency_file="requirements.txt"))
+        DockerSandboxProvider(settings(tmp_path), client=down).run(request(tmp_path))
 
 
 # ---------------------------------------------------------------- security scan
@@ -166,7 +206,7 @@ class FakeSandbox:
         return SandboxResult(
             build=StepResult("build", CheckResult(self.build), command="pip install", exit_code=0 if self.build == "PASS" else 1),
             tests=StepResult("tests", CheckResult(self.tests), command="pytest", note="no test suite" if self.tests == "SKIPPED" else None),
-            image="python:3.12-slim", logs="::step build start 1\n...", artifacts=self.artifacts,
+            image="python:3.12-slim", logs="### step build: pip install\n...\n[exit 0 in 1.0s]", artifacts=self.artifacts,
         )
 
     def health(self):
@@ -215,7 +255,7 @@ def test_validation_pass_writes_logs_and_marks_remediation_validated(db, tmp_pat
     validation = svc.validate(remediation.remediation_id)
     assert validation.status == ValidationStatus.COMPLETED and validation.overall_result == CheckResult.PASS
     assert (validation.build_status, validation.test_status, validation.security_scan_status) == ("PASS", "PASS", "PASS")
-    assert Path(validation.logs_path).is_file() and "::step build" in svc.read_logs(validation)
+    assert Path(validation.logs_path).is_file() and "### step build" in svc.read_logs(validation)
     assert remediation.status == RemediationStatus.VALIDATED
     assert validation.details["image"] == "python:3.12-slim"
 

@@ -52,7 +52,8 @@ def copytree_ignore(skip_paths: Iterable[Path] = ()) -> Callable[[str, list[str]
 
     * directories named in :data:`IGNORED_DIR_NAMES` are skipped (files with such a
       name are kept);
-    * ``.git`` is deliberately **kept** so the copy remains a git repository;
+    * ``.git`` is deliberately **kept** so the copy remains a git repository, but
+      ``.git/hooks`` is never copied (hooks are repository-controlled executables);
     * any absolute path listed in ``skip_paths`` is skipped (used to keep the
       Sentinel Chain workspace out of a copy of its own parent directory).
     """
@@ -64,6 +65,8 @@ def copytree_ignore(skip_paths: Iterable[Path] = ()) -> Callable[[str, list[str]
         for name in names:
             candidate = base / name
             if name in IGNORED_DIR_NAMES and candidate.is_dir():
+                ignored.add(name)
+            elif name == "hooks" and base.name == ".git":
                 ignored.add(name)
             elif skip and candidate.is_dir():
                 try:

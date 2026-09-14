@@ -114,7 +114,7 @@ def test_end_to_end_workflow_via_api(client):
     vid = response.json()["validation_id"]
     validation = client.get(f"/api/validations/{vid}").json()
     assert validation["status"] == "COMPLETED" and validation["overall_result"] == "PASS"
-    assert "::step build" in validation["logs"] and "::step build" in client.get(f"/api/validations/{vid}/logs").text
+    assert "### step build" in validation["logs"] and "### step build" in client.get(f"/api/validations/{vid}/logs").text
     assert client.get(f"/api/remediations/{rid}/validations").json()[0]["validation_id"] == vid
     assert client.get(f"/api/remediations/{rid}").json()["status"] == "VALIDATED"
 
