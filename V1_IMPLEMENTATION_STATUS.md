@@ -46,7 +46,8 @@ tests + 20 integration tests, all passing._
 * **Vulnerability detection** — `OSVProvider` with retries/back-off/pagination, CVSS 3.0/3.1
   base score computation, severity labels, alias-group de-duplication that never merges
   different CVEs and only advertises group-safe fixed versions, invalid versions never sent.
-* **Knowledge graph** — `KnowledgeGraphService` with UNWIND batch sync, stale-edge cleanup,
+* **Knowledge graph** — `KnowledgeGraphService` with UNWIND batch sync, stale-edge cleanup
+  (preserve mode keeps last known vulnerability edges when OSV was unavailable — audit F-03),
   component usage edges, queries (components using a dependency, related dependencies,
   vulnerabilities, dependency paths, repository graph) and graceful unavailability.
 * **Application-aware evidence** — import/require scanning with a curated import-name map,
@@ -72,7 +73,8 @@ tests + 20 integration tests, all passing._
   vulnerability / versions / impact / risk / validation / diff / checklist, manual instructions).
 * **API & UI** — 33 REST endpoints with typed errors, background execution + polling; React
   dashboard covering the whole workflow, facts and inferences labelled everywhere.
-* **Operations** — health endpoint for every backing service, stage-prefixed logs, startup sweep
+* **Operations** — `503 DatabaseUnavailable` when PostgreSQL is down (audit F-04),
+  health endpoint for every backing service, stage-prefixed logs, startup sweep
   that fails jobs interrupted by a restart, Docker Compose for PostgreSQL / Neo4j / backend /
   frontend (`full` profile) with Ollama on the host.
 
