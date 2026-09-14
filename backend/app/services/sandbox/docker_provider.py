@@ -5,9 +5,12 @@ How a validation run works
 1. The image is chosen by ecosystem (``settings.docker_python_image`` / ``docker_node_image``).
    **The first validation on a machine pulls the image** (``docker pull``), which can take a
    few minutes; later runs reuse the cached image.
-2. A container is created with a hardened configuration (no capabilities, no privilege
-   escalation, memory / CPU / pid limits, bridge network so package registries are
-   reachable) and **no host mounts**: the working copy is streamed in with ``put_archive``.
+2. A container is created with a hardened configuration (non-root user, read-only root
+   filesystem with in-memory ``/workspace`` and ``/tmp``, no capabilities, no privilege
+   escalation, memory / CPU / pid limits, ``bridge`` network by default so package registries
+   are reachable — ``DOCKER_SANDBOX_NETWORK=none`` for vendored projects) and **no host
+   mounts**: the working copy is streamed into the started container with ``put_archive``,
+   owned by the sandbox user.
 3. The container only runs a keep-alive process. **Every step (install, tests) is a separate
    ``docker exec``** driven from the host: the exit code comes from the Docker daemon, so
    nothing the repository prints to stdout can influence the verdict (a repository's own
@@ -49,7 +52,12 @@ SANDBOX_IGNORED_DIRS: frozenset[str] = frozenset(
     {".git", "node_modules", ".venv", "venv", "dist", "build", "__pycache__", ".pytest_cache", ".tox", ".mypy_cache"}
 )
 CONTAINER_WORKDIR = "/workspace"
+#: Writable, in-memory locations inside the otherwise read-only container.
+CONTAINER_HOME = f"{CONTAINER_WORKDIR}/.home"
+CONTAINER_VENV = f"{CONTAINER_WORKDIR}/.venv"
+TMP_TMPFS_SIZE = "256m"
 MAX_LOG_BYTES = 2 * 1024 * 1024  # keep the tail of the combined log
+MAX_ARTIFACT_BYTES = 8 * 1024 * 1024  # a regenerated lock file larger than this is not copied back
 MAX_WORKSPACE_BYTES = 256 * 1024 * 1024  # refuse to stream absurdly large working copies
 OUTPUT_TAIL_LINES = 40
 OUTPUT_TAIL_CHARS = 4000
@@ -66,11 +74,20 @@ SANDBOX_ENVIRONMENT = {
     "PYTHONDONTWRITEBYTECODE": "1",
     "npm_config_update_notifier": "false",
     "CI": "1",
+    # The root filesystem is read-only and the process is not root: every cache / config
+    # location must point into the writable workspace tmpfs.
+    "HOME": CONTAINER_HOME,
+    "XDG_CACHE_HOME": f"{CONTAINER_HOME}/.cache",
+    "PIP_CACHE_DIR": f"{CONTAINER_HOME}/.cache/pip",
+    "npm_config_cache": f"{CONTAINER_HOME}/.npm",
+    "TMPDIR": "/tmp",
 }
 
-PYTHON_INSTALL_CMD = "python -m pip install --no-cache-dir -r {file}"
-PYTHON_PYTEST_INSTALL_CMD = "python -m pip install -q pytest"
-PYTHON_TEST_CMD = "python -m pytest -q"
+# Python installs go into a virtualenv inside the workspace: the image's site-packages is on
+# the read-only root filesystem and the sandbox user could not write there anyway.
+PYTHON_INSTALL_CMD = f"python -m venv {CONTAINER_VENV} && {CONTAINER_VENV}/bin/python -m pip install --no-cache-dir -r {{file}}"
+PYTHON_PYTEST_INSTALL_CMD = f"{CONTAINER_VENV}/bin/python -m pip install -q pytest"
+PYTHON_TEST_CMD = f"{CONTAINER_VENV}/bin/python -m pytest -q"
 NPM_INSTALL_CMD = "npm install --no-audit --no-fund"
 NPM_TEST_CMD = "npm test"
 
@@ -189,12 +206,14 @@ def _should_skip(name: str) -> bool:
     return name in SANDBOX_IGNORED_DIRS
 
 
-def build_workspace_tar(workspace: Path, prefix: str = "workspace") -> bytes:
+def build_workspace_tar(workspace: Path, prefix: str = "workspace", *, uid: int = 0, gid: int = 0) -> bytes:
     """In-memory tar of the working copy, rooted at ``<prefix>/`` (ignored directories excluded).
 
-    Symlinks are stored as symlinks (never followed) and every entry is owned by root.
+    Symlinks are stored as symlinks (never followed) and every entry is owned by ``uid:gid``
+    (the sandbox user, so installs can write next to the manifests).
     """
     workspace = Path(workspace)
+    owned = _owned_by(uid, gid)
     if not workspace.is_dir():
         raise SandboxError(f"Sandbox workspace does not exist or is not a directory: {workspace}")
     buffer = io.BytesIO()
@@ -204,12 +223,12 @@ def build_workspace_tar(workspace: Path, prefix: str = "workspace") -> bytes:
         root.type = tarfile.DIRTYPE
         root.mode = 0o755
         root.mtime = int(time.time())
-        tar.addfile(root)
+        tar.addfile(owned(root))
         for directory, dirnames, filenames in os.walk(workspace):
             dirnames[:] = sorted(d for d in dirnames if not _should_skip(d))
             rel_dir = Path(directory).relative_to(workspace)
             for dirname in dirnames:
-                tar.add(Path(directory) / dirname, arcname=_arcname(prefix, rel_dir / dirname), recursive=False, filter=_root_owned)
+                tar.add(Path(directory) / dirname, arcname=_arcname(prefix, rel_dir / dirname), recursive=False, filter=owned)
             for filename in sorted(filenames):
                 source = Path(directory) / filename
                 try:
@@ -220,7 +239,7 @@ def build_workspace_tar(workspace: Path, prefix: str = "workspace") -> bytes:
                             f"Workspace {workspace} exceeds {MAX_WORKSPACE_BYTES // (1024 * 1024)} MB and cannot be "
                             "streamed into the sandbox; remove build artefacts or large data files."
                         )
-                    tar.add(source, arcname=_arcname(prefix, rel_dir / filename), recursive=False, filter=_root_owned)
+                    tar.add(source, arcname=_arcname(prefix, rel_dir / filename), recursive=False, filter=owned)
                 except OSError as exc:
                     log.warning("Skipping unreadable file %s: %s", source, exc)
     return buffer.getvalue()
@@ -230,10 +249,26 @@ def _arcname(prefix: str, relative: Path) -> str:
     return f"{prefix}/{relative.as_posix()}"
 
 
-def _root_owned(info: tarfile.TarInfo) -> tarfile.TarInfo:
-    info.uid = info.gid = 0
-    info.uname = info.gname = "root"
-    return info
+def _owned_by(uid: int, gid: int):
+    def _apply(info: tarfile.TarInfo) -> tarfile.TarInfo:
+        info.uid, info.gid = uid, gid
+        info.uname = info.gname = ""
+        return info
+
+    return _apply
+
+
+def parse_user(spec: str) -> tuple[int, int]:
+    """``"uid[:gid]"`` → (uid, gid); refuses root and non-numeric specs."""
+    parts = str(spec).strip().split(":")
+    try:
+        uid = int(parts[0])
+        gid = int(parts[1]) if len(parts) > 1 and parts[1] else uid
+    except (ValueError, IndexError) as exc:
+        raise SandboxError(f"DOCKER_SANDBOX_USER must be numeric 'uid[:gid]', got {spec!r}") from exc
+    if uid == 0 or gid == 0:
+        raise SandboxError("DOCKER_SANDBOX_USER must not be root (uid/gid 0)")
+    return uid, gid
 
 
 # ---------------------------------------------------------------------- provider
@@ -265,7 +300,8 @@ class DockerSandboxProvider(SandboxProvider):
         image = self.image_for(request.ecosystem)
         workspace = Path(request.workspace_path)
         plan = build_plan(request)
-        archive = build_workspace_tar(workspace)
+        uid, gid = parse_user(self.settings.docker_sandbox_user)
+        archive = build_workspace_tar(workspace, uid=uid, gid=gid)
         client = self._get_client()
         container = self._create_container(client, image, request)
         container_id = getattr(container, "id", None)
@@ -278,8 +314,8 @@ class DockerSandboxProvider(SandboxProvider):
         )
         steps: list[_ExecOutcome] = []
         try:
-            self._copy_workspace_in(container, archive)
-            container.start()
+            container.start()  # the /workspace tmpfs only exists on a started container
+            self._copy_workspace_in(client, container, archive)
             build = self._exec_step(container, "build", plan.build_command, deadline)
             steps.append(build)
             if build.timed_out or build.exit_code is None:
@@ -351,10 +387,21 @@ class DockerSandboxProvider(SandboxProvider):
 
         The container's own command is a keep-alive; the real work happens in ``exec``s.
         """
+        uid, gid = parse_user(self.settings.docker_sandbox_user)
+        network = self.settings.docker_sandbox_network.strip() or "bridge"
+        if network not in ("bridge", "none"):
+            raise SandboxError(f"DOCKER_SANDBOX_NETWORK must be 'bridge' or 'none', got {network!r}")
         return {
             "command": list(KEEPALIVE_COMMAND),
             "working_dir": CONTAINER_WORKDIR,
-            "network_mode": "bridge",
+            "user": f"{uid}:{gid}",
+            "network_mode": network,
+            "read_only": bool(self.settings.docker_read_only_rootfs),
+            # Writable in-memory areas: the workspace (installs happen there) and /tmp.
+            "tmpfs": {
+                CONTAINER_WORKDIR: f"rw,exec,size={self.settings.docker_workspace_tmpfs_size},uid={uid},gid={gid},mode=0755",
+                "/tmp": f"rw,exec,size={TMP_TMPFS_SIZE},uid={uid},gid={gid},mode=1777",
+            },
             "mem_limit": self.settings.docker_memory_limit,
             "nano_cpus": int(self.settings.docker_cpu_limit * 1e9),
             "pids_limit": 512,
@@ -376,14 +423,31 @@ class DockerSandboxProvider(SandboxProvider):
             ) from exc
         log.info("Image %s pulled", image)
 
-    @staticmethod
-    def _copy_workspace_in(container: Any, archive: bytes) -> None:
+    def _copy_workspace_in(self, client: Any, container: Any, archive: bytes) -> None:
+        """Stream the workspace tar into the running container through ``tar -x`` on an exec's stdin.
+
+        ``put_archive`` is refused by the daemon for a read-only root filesystem (even when
+        the target is a tmpfs), so the archive is written by the sandbox user itself into the
+        writable ``/workspace`` tmpfs. No host path is ever mounted.
+        """
+        import socket as _socket
+
+        api = client.api
+        user = self.settings.docker_sandbox_user
         try:
-            ok = container.put_archive("/", archive)
+            created = api.exec_create(container.id, ["tar", "-x", "-C", "/"], stdin=True, stdout=True, stderr=True, user=user)
+            stream = api.exec_start(created["Id"], socket=True)
+            raw = getattr(stream, "_sock", stream)
+            raw.sendall(archive)
+            raw.shutdown(_socket.SHUT_WR)  # EOF for tar; the pooled response releases the socket itself
+            output = b"".join(iter(lambda: raw.recv(65536), b""))
+            exit_code = api.exec_inspect(created["Id"]).get("ExitCode")
         except Exception as exc:  # noqa: BLE001
             raise SandboxError(f"Docker could not copy the workspace into the sandbox: {exc}") from exc
-        if ok is False:
-            raise SandboxError("Docker rejected the workspace archive (put_archive returned False)")
+        if exit_code != 0:
+            raise SandboxError(
+                f"Extracting the workspace inside the sandbox failed (tar exit {exit_code}): {output.decode(errors='replace')[-300:]}"
+            )
 
     @staticmethod
     def _exec_step(container: Any, name: str, command: str, deadline: float) -> "_ExecOutcome":
@@ -429,20 +493,30 @@ class DockerSandboxProvider(SandboxProvider):
 
     @staticmethod
     def _collect_artifacts(container: Any, request: SandboxRequest) -> dict[str, str]:
-        """Copy regenerated files (npm lock file) out of the container: {relative_path: content}."""
+        """Copy regenerated files (npm lock file) out of the container: {relative_path: content}.
+
+        Read through an exec (``get_archive`` cannot read from the in-memory workspace of a
+        read-only container); the file is capped at ``MAX_ARTIFACT_BYTES``.
+        """
         if request.ecosystem != Ecosystem.NPM:
             return {}
         manifest_dir = PurePosixPath(request.dependency_file).parent
         relative = (manifest_dir / LOCK_FILE).as_posix()
         container_path = f"{CONTAINER_WORKDIR}/{relative}"
         try:
-            stream, _stat = container.get_archive(container_path)
-            raw = b"".join(stream)
+            exit_code, output = _unpack_exec(
+                container.exec_run(["sh", "-c", f"head -c {MAX_ARTIFACT_BYTES} -- {shlex.quote(container_path)}"], stdout=True, stderr=False, demux=False)
+            )
         except Exception as exc:  # noqa: BLE001 - a missing lock file is not an error
             log.info("No %s to copy back from the sandbox (%s)", relative, exc.__class__.__name__)
             return {}
-        content = _first_file_from_tar(raw)
-        return {relative: content} if content is not None else {}
+        if exit_code != 0 or not output:
+            log.info("No %s to copy back from the sandbox (exit %s)", relative, exit_code)
+            return {}
+        if len(output) >= MAX_ARTIFACT_BYTES:
+            log.warning("%s exceeds %d bytes; not copied back", relative, MAX_ARTIFACT_BYTES)
+            return {}
+        return {relative: output.decode("utf-8", errors="replace")}
 
     @staticmethod
     def _remove(container: Any) -> None:
@@ -544,18 +618,6 @@ def _decode_capped(raw: bytes) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def _first_file_from_tar(raw: bytes) -> str | None:
-    try:
-        with tarfile.open(fileobj=io.BytesIO(raw)) as tar:
-            for member in tar.getmembers():
-                if member.isfile():
-                    handle = tar.extractfile(member)
-                    return handle.read().decode("utf-8", errors="replace") if handle else None
-    except (tarfile.TarError, OSError):
-        return None
-    return None
-
-
 def _is_image_not_found(exc: Exception) -> bool:
     try:
         import docker.errors
@@ -579,6 +641,7 @@ __all__ = [
     "build_plan",
     "build_script",
     "build_workspace_tar",
+    "parse_user",
     "output_tail",
     "SANDBOX_IGNORED_DIRS",
     "SANDBOX_ENVIRONMENT",

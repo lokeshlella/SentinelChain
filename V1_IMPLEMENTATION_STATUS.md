@@ -60,8 +60,9 @@ tests + 20 integration tests, all passing._
   excluded), `select_candidates`, `RequirementsTxtModifier` / `PackageJsonModifier`
   (formatting preserved), temporary working copies, deterministic fallback when the LLM is
   unavailable, remediation history per finding.
-* **Docker sandbox** — `DockerSandboxProvider` (no host mounts, `cap_drop ALL`,
-  `no-new-privileges`, memory/CPU/pid limits, one `docker exec` per step with the exit code
+* **Docker sandbox** — `DockerSandboxProvider` (non-root user, read-only root filesystem with
+  in-memory `/workspace` and `/tmp`, no host mounts, `cap_drop ALL`, `no-new-privileges`,
+  memory/CPU/pid limits, configurable network, one `docker exec` per step with the exit code
   taken from the daemon, host-side deadline that kills the container and marks unfinished
   steps `UNKNOWN`, host-assembled logs, lock-file artifact copy-back, guaranteed container
   removal), `DependencySecurityScanner`, `ValidationService` with the documented
@@ -100,8 +101,9 @@ tests + 20 integration tests, all passing._
   own estimate. Larger models improve quality at the cost of latency/RAM.
 * Background jobs run inside the API process; a restart marks in-flight jobs `FAILED`
   (they are not resumed). One analysis per repository and one validation per remediation at a time.
-* The sandbox needs network access to install packages; it is isolated from the host but not
-  from the internet.
+* The sandbox needs network access to install packages (`DOCKER_SANDBOX_NETWORK=bridge`); it is
+  isolated from the host (non-root, read-only rootfs, no capabilities, no mounts) but not from
+  the internet unless `DOCKER_SANDBOX_NETWORK=none` is used for vendored projects.
 * OSV data changes over time — the demo README documents how to re-verify the advisory ids.
 * No authentication: the API is meant for a local, single-user setup.
 * Path-based local repositories are copied entirely (minus build artefacts); very large

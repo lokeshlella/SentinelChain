@@ -440,3 +440,39 @@ def test_github_duplicate_detection_is_case_insensitive(github_service):
     github_service.register("https://github.com/Octocat/Hello-World")
     with pytest.raises(ConflictError):
         github_service.register("https://github.com/octocat/hello-world")
+
+
+def test_delete_removes_remediation_validation_and_report_artefacts(service, settings, project, db):
+    """Audit F-07: artefacts keyed by remediation/validation id must go with the repository."""
+    from app.models import Analysis, Dependency, Finding, Remediation, Validation, Vulnerability
+
+    repo = service.register(str(project))
+    analysis = Analysis(repository_id=repo.repository_id, status="COMPLETED")
+    db.add(analysis)
+    db.flush()
+    dep = Dependency(repository_id=repo.repository_id, analysis_id=analysis.analysis_id, package_name="flask", version="2.0.0",
+                     ecosystem="PyPI", direct_or_transitive="unknown", source_file="requirements.txt", vulnerability_status="VULNERABLE")
+    vuln = Vulnerability(identifier="GHSA-test", source="osv", severity="LOW")
+    db.add_all([dep, vuln])
+    db.flush()
+    finding = Finding(analysis_id=analysis.analysis_id, dependency_id=dep.dependency_id, vulnerability_id=vuln.vulnerability_id, ai_status="SKIPPED")
+    db.add(finding)
+    db.flush()
+    rem = Remediation(finding_id=finding.finding_id, status="VALIDATED")
+    db.add(rem)
+    db.flush()
+    val = Validation(remediation_id=rem.remediation_id, status="COMPLETED")
+    db.add(val)
+    db.commit()
+    root = settings.workspace_path
+    dirs = [root / "remediations" / str(rem.remediation_id), root / "validations" / str(val.validation_id), root / "reports" / str(rem.remediation_id)]
+    other = root / "remediations" / str(rem.remediation_id + 100)  # belongs to nobody we delete
+    for d in dirs + [other]:
+        d.mkdir(parents=True)
+        (d / "marker").write_text("x")
+
+    service.delete(repo.repository_id)
+
+    assert all(not d.exists() for d in dirs)
+    assert other.exists()  # unrelated artefacts are untouched
+    assert not service.workspace_dir(repo.repository_id).exists()

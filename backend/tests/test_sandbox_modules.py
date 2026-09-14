@@ -65,6 +65,26 @@ def test_plan_builders_detect_tests(tmp_path):
     assert "npm install" in plan3.build_command and plan3.test_command is None
 
 
+def test_sandbox_user_and_network_settings_are_validated(tmp_path):
+    from app.services.sandbox.docker_provider import parse_user
+
+    assert parse_user("1000:1000") == (1000, 1000) and parse_user("65534") == (65534, 65534)
+    for bad in ("0:0", "root", "1000:0", ""):
+        with pytest.raises(SandboxError):
+            parse_user(bad)
+    provider = DockerSandboxProvider(Settings(_env_file=None, docker_sandbox_network="none"), client=object())
+    assert provider.container_kwargs("python:3.12-slim", request(tmp_path))["network_mode"] == "none"
+    with pytest.raises(SandboxError):
+        DockerSandboxProvider(Settings(_env_file=None, docker_sandbox_network="host"), client=object()).container_kwargs("python:3.12-slim", request(tmp_path))
+
+
+def test_workspace_extraction_failure_is_a_sandbox_error(tmp_path):
+    client = FakeDockerClient(tar_exit_code=2)
+    with pytest.raises(SandboxError):
+        DockerSandboxProvider(settings(tmp_path), client=client).run(request(tmp_path))
+    assert client.last_container.removed == {"force": True}
+
+
 def test_plan_quotes_repository_controlled_file_names(tmp_path):
     ws = python_workspace(tmp_path)
     plan = build_plan(SandboxRequest(workspace_path=ws, ecosystem="PyPI", dependency_file="requirements-$(touch /tmp/pwned).txt"))
@@ -98,9 +118,21 @@ def test_provider_runs_each_step_as_an_exec_and_cleans_up(tmp_path):
     assert kwargs["cap_drop"] == ["ALL"] and "no-new-privileges" in kwargs["security_opt"]
     assert kwargs.get("pids_limit") == 512 and kwargs.get("mem_limit")
     assert not any(k in kwargs for k in ("volumes", "mounts", "privileged"))
+    # audit F-08: non-root, read-only rootfs, in-memory writable workspace and /tmp
+    assert kwargs["user"] == "65534:65534" and kwargs["read_only"] is True
+    assert kwargs["tmpfs"]["/workspace"].startswith("rw,exec,size=1g,uid=65534,gid=65534") and "/tmp" in kwargs["tmpfs"]
+    assert kwargs["environment"]["HOME"] == "/workspace/.home"
     assert container.removed == {"force": True}
-    names = [n for _, data in container.archives for n in tar_names(data)]
+    # the workspace is streamed through an exec'd tar AFTER start (tmpfs), owned by the sandbox user
+    assert container.events[:2] == ["start", "copy-in"]
+    data = b"".join(container.streamed_archives[0])
+    names = tar_names(data)
     assert any(n.endswith("requirements.txt") for n in names) and not any("node_modules" in n for n in names)
+    import io, tarfile
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        assert {(m.uid, m.gid) for m in tar.getmembers()} == {(65534, 65534)}
+    assert client.api.execs[0]["cmd"] == ["tar", "-x", "-C", "/"] and client.api.execs[0]["user"] == "65534:65534"
+    assert "/workspace/.venv/bin/python -m pip install" in container.execs[0]["cmd"][2]
     assert "### step build" in result.logs and "[exit 0" in result.logs
 
 

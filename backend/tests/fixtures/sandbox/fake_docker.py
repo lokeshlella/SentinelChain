@@ -49,21 +49,31 @@ class FakeContainer:
         self.kwargs = kwargs
         self.id = "fakecontainer0123456789abcdef"
         self.archives: list[tuple[str, bytes]] = []
+        self.streamed_archives: list[list[bytes]] = []  # bytes written through the exec'd tar
+        self.events: list[str] = []
         self.started = False
         self.killed = False
         self.removed: dict[str, Any] | None = None
         self.execs: list[dict[str, Any]] = []
         self._killed_event = threading.Event()
 
-    def put_archive(self, path: str, data: bytes) -> bool:
+    def put_archive(self, path: str, data: bytes) -> bool:  # kept for completeness; the provider streams via exec
         self.archives.append((path, data))
         return True
 
     def start(self) -> None:
         self.started = True
+        self.events.append("start")
 
     def exec_run(self, cmd, **kwargs) -> ExecResult:
         self.execs.append({"cmd": list(cmd), **kwargs})
+        self.events.append("exec")
+        text = " ".join(cmd)
+        if "head -c" in text:  # artifact read-back
+            for name, content in self.client.archive_files.items():
+                if text.rstrip("'\"").endswith(name) or name in text:
+                    return ExecResult(0, content)
+            return ExecResult(1, b"")
         step = self.client.step_for(cmd)
         if step in self.client.hang_on:
             # Behave like a real exec: block until the container is killed, then report the kill.
@@ -118,6 +128,48 @@ class FakeImages:
         return image
 
 
+class _FakeSocket:
+    """Stand-in for the raw socket returned by ``api.exec_start(..., socket=True)``."""
+
+    def __init__(self, sink: list[bytes]):
+        self._sink = sink
+        self._eof = False
+
+    def sendall(self, data: bytes) -> None:
+        self._sink.append(bytes(data))
+
+    def shutdown(self, how: int) -> None:
+        self._eof = True
+
+    def recv(self, n: int) -> bytes:
+        return b""
+
+    def close(self) -> None:
+        pass
+
+
+class FakeLowLevelAPI:
+    """``client.api`` subset used to stream the workspace tar into the container."""
+
+    def __init__(self, client: "FakeDockerClient") -> None:
+        self.client = client
+        self.execs: list[dict[str, Any]] = []
+
+    def exec_create(self, container_id: str, cmd, **kwargs) -> dict[str, str]:
+        self.execs.append({"container_id": container_id, "cmd": list(cmd), **kwargs})
+        return {"Id": f"exec-{len(self.execs)}"}
+
+    def exec_start(self, exec_id: str, socket: bool = False, **kwargs):
+        container = self.client.containers.created[-1]
+        container.events.append("copy-in")
+        sink: list[bytes] = []
+        container.streamed_archives.append(sink)
+        return _FakeSocket(sink)
+
+    def exec_inspect(self, exec_id: str) -> dict[str, Any]:
+        return {"ExitCode": self.client.tar_exit_code}
+
+
 class FakeDockerClient:
     """``exec_results``: {"build": (exit_code, output_bytes), "tests": (...)}; ``hang_on``: steps that block until killed."""
 
@@ -133,6 +185,7 @@ class FakeDockerClient:
         create_error: Exception | None = None,
         archive_files: dict[str, bytes] | None = None,
         ping_error: Exception | None = None,
+        tar_exit_code: int = 0,
     ) -> None:
         self.exec_results = exec_results if exec_results is not None else {"build": (0, PIP_INSTALL_OK), "tests": (0, PYTEST_OK)}
         self.hang_on = set(hang_on)
@@ -143,6 +196,8 @@ class FakeDockerClient:
         self.ping_error = ping_error
         self.images = FakeImages(set(images_present), pull_error)
         self.containers = FakeContainers(self)
+        self.tar_exit_code = tar_exit_code
+        self.api = FakeLowLevelAPI(self)
 
     @staticmethod
     def step_for(cmd) -> str:
