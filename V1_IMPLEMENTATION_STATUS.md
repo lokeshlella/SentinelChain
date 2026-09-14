@@ -79,9 +79,11 @@ tests + 20 integration tests, all passing._
 * **Working-copy hardening** — `repository/git_safety.py`: hooks are never copied,
   `.git/config` is reduced to an allow-list, `.git` symlinks/gitdir pointers are severed, and
   all git commands run with hook/fsmonitor/helper overrides and `--no-verify` (audit F-02).
-* **Operations** — workspace-relative path storage so rows are not tied to one instance's
-  filesystem (audit F-10), `503 DatabaseUnavailable` when PostgreSQL is down (audit F-04),
-  health endpoint for every backing service, stage-prefixed logs, startup sweep
+* **Operations** — every long stage (ingestion, analysis, remediation, on-demand AI,
+  validation) is a `202` background job with status polling (audit F-05); heartbeats and a
+  stale-job watchdog (audit F-06); workspace-relative path storage so rows are not tied to one
+  instance's filesystem (audit F-10); `503 DatabaseUnavailable` when PostgreSQL is down
+  (audit F-04); health endpoint for every backing service, stage-prefixed logs, startup sweep
   that fails jobs interrupted by a restart, Docker Compose for PostgreSQL / Neo4j / backend /
   frontend (`full` profile) with Ollama on the host.
 
