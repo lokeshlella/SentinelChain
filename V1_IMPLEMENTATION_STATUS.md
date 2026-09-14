@@ -72,7 +72,8 @@ tests + 20 integration tests, all passing._
   vulnerability / versions / impact / risk / validation / diff / checklist, manual instructions).
 * **API & UI** — 33 REST endpoints with typed errors, background execution + polling; React
   dashboard covering the whole workflow, facts and inferences labelled everywhere.
-* **Operations** — health endpoint for every backing service, stage-prefixed logs, startup sweep
+* **Operations** — workspace-relative path storage so rows are not tied to one instance's
+  filesystem (audit F-10), health endpoint for every backing service, stage-prefixed logs, startup sweep
   that fails jobs interrupted by a restart, Docker Compose for PostgreSQL / Neo4j / backend /
   frontend (`full` profile) with Ollama on the host.
 

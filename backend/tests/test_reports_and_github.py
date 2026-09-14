@@ -103,7 +103,7 @@ def test_report_without_remediation_says_so(db, graph):
     assert any("No remediation" in n for n in report.section("Recommended Remediation").notes)
 
 
-@pytest.mark.parametrize("overall,tests,decision", [("PASS", "SKIPPED", "Apply with manual testing"), ("FAIL", "FAIL", "Do not apply yet"), ("UNKNOWN", "PASS", "Do not apply yet")])
+@pytest.mark.parametrize("overall,tests,decision", [("UNKNOWN", "SKIPPED", "Apply with manual testing"), ("FAIL", "FAIL", "Do not apply yet"), ("UNKNOWN", "PASS", "Do not apply yet")])
 def test_final_recommendation_rules(db, graph, tmp_path, overall, tests, decision):
     add_remediation(db, graph, tmp_path, overall=overall, tests=tests)
     assert ReportService(db).build(graph["finding"].finding_id).final_recommendation.decision == decision
@@ -234,6 +234,21 @@ def test_service_requires_validation_and_refuses_failed_unless_forced(db, graph,
         service.create(rem.remediation_id)
     pr = service.create(rem.remediation_id, force=True)
     assert pr.review_status == PullRequestStatus.DRAFT
+
+
+def test_partially_validated_remediation_can_open_a_pr_but_says_so(db, graph, tmp_path):
+    """Audit F-09: build + security passed, tests skipped → PR allowed without force, body states it."""
+    rem = add_remediation(db, graph, tmp_path, overall="UNKNOWN", tests="SKIPPED")
+    rem.status = RemediationStatus.PARTIALLY_VALIDATED
+    db.commit()
+    pr = PullRequestService(db, Settings(_env_file=None, repository_workspace=str(tmp_path / "ws")), provider=FakeProvider()).create(rem.remediation_id)
+    assert pr.review_status == PullRequestStatus.DRAFT
+    assert "partially validated" in pr.body and "test it manually" in pr.body
+    assert "Overall:** UNKNOWN" in pr.body
+    # a genuinely failed / unknown validation is still refused without force
+    rem2 = add_remediation(db, graph, tmp_path, overall="UNKNOWN", tests="UNKNOWN")
+    with pytest.raises(ConflictError):
+        PullRequestService(db, Settings(_env_file=None, repository_workspace=str(tmp_path / "ws")), provider=FakeProvider()).create(rem2.remediation_id)
 
 
 def test_service_unavailable_without_token_keeps_instructions(db, graph, tmp_path):

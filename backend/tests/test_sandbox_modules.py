@@ -73,8 +73,12 @@ def test_script_builders_detect_tests(tmp_path):
 
 
 def test_overall_result_rules():
+    from app.services.sandbox.service import is_partial_pass
+
     assert overall_result("PASS", "PASS", "PASS") == CheckResult.PASS
-    assert overall_result("PASS", "SKIPPED", "PASS") == CheckResult.PASS
+    # audit F-09 / spec §14: a skipped test suite is never counted as PASS
+    assert overall_result("PASS", "SKIPPED", "PASS") == CheckResult.UNKNOWN
+    assert is_partial_pass("PASS", "SKIPPED", "PASS") and not is_partial_pass("PASS", "SKIPPED", "UNKNOWN")
     assert overall_result("PASS", "FAIL", "PASS") == CheckResult.FAIL
     assert overall_result("FAIL", "SKIPPED", "PASS") == CheckResult.FAIL
     assert overall_result("PASS", "PASS", "UNKNOWN") == CheckResult.UNKNOWN
@@ -215,15 +219,20 @@ def test_validation_pass_writes_logs_and_marks_remediation_validated(db, tmp_pat
     validation = svc.validate(remediation.remediation_id)
     assert validation.status == ValidationStatus.COMPLETED and validation.overall_result == CheckResult.PASS
     assert (validation.build_status, validation.test_status, validation.security_scan_status) == ("PASS", "PASS", "PASS")
-    assert Path(validation.logs_path).is_file() and "::step build" in svc.read_logs(validation)
+    assert validation.logs_path == f"validations/{validation.validation_id}/logs.txt"  # workspace-relative (F-10)
+    assert (tmp_path / "ws" / validation.logs_path).is_file() and "::step build" in svc.read_logs(validation)
     assert remediation.status == RemediationStatus.VALIDATED
     assert validation.details["image"] == "python:3.12-slim"
 
 
-def test_validation_with_skipped_tests_passes_with_warning(db, tmp_path, remediation):
+def test_validation_with_skipped_tests_is_partial_not_pass(db, tmp_path, remediation):
+    """Audit F-09: install + security OK but no tests → overall UNKNOWN, remediation PARTIALLY_VALIDATED."""
     validation = validation_service(db, tmp_path, FakeSandbox(tests="SKIPPED"), FakeScanner()).validate(remediation.remediation_id)
-    assert validation.overall_result == CheckResult.PASS and validation.test_status == "SKIPPED"
+    assert validation.overall_result == CheckResult.UNKNOWN and validation.test_status == "SKIPPED"
     assert any("skipped" in w.lower() for w in validation.details["warnings"])
+    assert remediation.status == RemediationStatus.PARTIALLY_VALIDATED
+    # a partially validated remediation can be validated again (e.g. after tests were added)
+    validation_service(db, tmp_path, FakeSandbox(), FakeScanner()).start(remediation.remediation_id)
 
 
 @pytest.mark.parametrize("sandbox,scanner,expected", [

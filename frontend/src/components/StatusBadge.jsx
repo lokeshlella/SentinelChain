@@ -6,7 +6,7 @@ const CLASS_BY_VALUE = {
   PENDING: 'neutral', RUNNING: 'neutral', UNKNOWN: 'neutral', SKIPPED: 'neutral', UNCHECKED: 'neutral',
   VALIDATING: 'neutral', PROPOSED: 'info', CLOSED: 'neutral',
   // needs attention
-  PARTIAL: 'warn', UNAVAILABLE: 'warn', MEDIUM: 'warn', VALIDATION_FAILED: 'warn',
+  PARTIAL: 'warn', PARTIALLY_VALIDATED: 'warn', UNAVAILABLE: 'warn', MEDIUM: 'warn', VALIDATION_FAILED: 'warn',
   // bad
   FAIL: 'danger', FAILED: 'danger', VULNERABLE: 'danger', HIGH: 'danger',
   CRITICAL: 'critical',

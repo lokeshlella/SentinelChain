@@ -87,15 +87,17 @@ with values `PENDING | RUNNING | OK | PARTIAL | UNAVAILABLE | FAILED | SKIPPED`.
 | POST | `/remediations/{id}/validate` | | Start Docker sandbox validation in the background. `202` with the `Validation` |
 | GET | `/remediations/{id}/validations` | | Validations of the remediation |
 | GET | `/remediations/{id}/report` | `?format=` | Evidence report for this remediation |
-| POST | `/remediations/{id}/pull-request` | `{"force"?: false}` | Create a **draft** GitHub PR from the validated workspace (`force` allows a failed validation). `201` |
+| POST | `/remediations/{id}/pull-request` | `{"force"?: false}` | Create a **draft** GitHub PR from a validated (or partially validated) workspace; `force` allows a failed/unknown validation. `201` |
 | GET | `/validations/{id}` | | build / test / security / overall results, step details, logs |
 | GET | `/validations/{id}/logs` | | Raw sandbox logs (`text/plain`) |
 | GET | `/pull-requests` | | All pull requests |
 | GET | `/pull-requests/{id}` | | Title, body, status (`DRAFT`, `OPEN`, `UNAVAILABLE`, `FAILED`), GitHub URL, evidence, manual instructions |
 
-Validation result values: `PASS | FAIL | SKIPPED | UNKNOWN`. A skipped test suite is never
-reported as `PASS`; `overall_result` is `PASS` only when the build and security scan passed
-(tests `PASS` or `SKIPPED`, the latter recorded as a warning).
+Validation result values: `PASS | FAIL | SKIPPED | UNKNOWN`. `overall_result` is `PASS` only
+when build, tests **and** security scan passed. A skipped test suite is never counted as
+passing: build + security `PASS` with tests `SKIPPED` gives `overall_result: UNKNOWN`, remediation
+status `PARTIALLY_VALIDATED`, the report decision "Apply with manual testing", and a draft PR
+can still be opened (the PR body states that the change is not behaviourally verified).
 
 ## Typical workflow with curl
 

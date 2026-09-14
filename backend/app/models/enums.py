@@ -89,6 +89,8 @@ class RemediationStatus(StrEnum):
     FAILED = "FAILED"
     VALIDATING = "VALIDATING"
     VALIDATED = "VALIDATED"
+    # Build and security scan passed but no test suite ran: honest middle state, never "validated".
+    PARTIALLY_VALIDATED = "PARTIALLY_VALIDATED"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     PR_CREATED = "PR_CREATED"
 

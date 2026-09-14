@@ -107,10 +107,13 @@ def test_register_local_project_ingests_profile_and_components(service, db, sett
     assert repository.branch is None
     assert repository.commit_sha is None
     assert repository.language == "Python"
-    assert repository.local_path == str(settings.workspace_path / "repos" / str(repository.repository_id))
-    assert Path(repository.local_path).is_dir()
-    assert (Path(repository.local_path) / "app" / "main.py").exists()
-    assert not (Path(repository.local_path) / "node_modules").exists()
+    # stored relative to the workspace (audit F-10), resolved against this instance's workspace
+    assert repository.local_path == f"repos/{repository.repository_id}"
+    local = service.local_path_of(repository)
+    assert local == settings.workspace_path / "repos" / str(repository.repository_id)
+    assert local.is_dir()
+    assert (local / "app" / "main.py").exists()
+    assert not (local / "node_modules").exists()
 
     assert repository.profile["name"] == "demo-project"
     assert repository.profile["dependency_files"] == ["requirements.txt"]
@@ -176,7 +179,7 @@ def test_register_github_offline_via_bare_remote(github_service, bare_remote):
     assert repository.commit_sha == bare_remote["sha"]
     assert repository.language == "JavaScript"
     assert repository.profile["name"] == "hello"
-    assert (Path(repository.local_path) / ".git").is_dir()
+    assert (github_service.local_path_of(repository) / ".git").is_dir()
 
     # duplicates are detected on the canonical URL, whatever form the user typed
     with pytest.raises(ConflictError):
@@ -197,8 +200,8 @@ def test_register_default_branch_after_a_named_branch(github_service, bare_remot
     default = github_service.register("https://github.com/octocat/Hello-World")
     assert default.repository_id != dev.repository_id
     assert default.branch == "main" and default.commit_sha == bare_remote["sha"]
-    assert not (Path(default.local_path) / "src" / "dev.js").exists()
-    assert Path(dev.local_path).is_dir(), "the dev registration is untouched"
+    assert not (github_service.local_path_of(default) / "src" / "dev.js").exists()
+    assert github_service.local_path_of(dev).is_dir(), "the dev registration is untouched"
 
     # both registrations now exist, so each of them is a duplicate of itself only
     with pytest.raises(ConflictError) as excinfo:
@@ -294,7 +297,7 @@ def test_register_default_branch_lookup_failure_leaves_nothing_behind(db, settin
 
 def test_ingest_without_refresh_reanalyses_existing_copy(service, project):
     repository = service.register(str(project))
-    copy = Path(repository.local_path)
+    copy = service.local_path_of(repository)
     write(copy / "scripts" / "run.sh", "#!/bin/sh\n")  # only in the working copy
     (copy / "docs" / "index.md").unlink()
     (copy / "docs").rmdir()
@@ -332,7 +335,7 @@ def test_ingest_refresh_picks_up_source_changes_and_updates_components(service, 
 
 def test_ingest_refetches_when_working_copy_is_missing(service, project):
     repository = service.register(str(project))
-    copy = Path(repository.local_path)
+    copy = service.local_path_of(repository)
     import shutil
 
     shutil.rmtree(copy)
@@ -364,13 +367,13 @@ def test_get_list_and_delete(service, db, settings, project, tmp_path):
     listed = service.list()
     assert [r.repository_id for r in listed] == [other.repository_id, first.repository_id], "newest first"
 
-    workspace_dir = Path(first.local_path)
+    workspace_dir = service.local_path_of(first)
     assert workspace_dir.exists()
     service.delete(first.repository_id)
     assert db.get(Repository, first.repository_id) is None
     assert db.scalars(select(Component).where(Component.repository_id == first.repository_id)).all() == []
     assert not workspace_dir.exists()
-    assert Path(other.local_path).exists(), "other repositories are untouched"
+    assert service.local_path_of(other).exists(), "other repositories are untouched"
     assert project.exists() and (project / "app" / "main.py").exists(), "the user's original is never deleted"
 
     with pytest.raises(NotFoundError) as excinfo:
@@ -412,18 +415,18 @@ def test_delete_only_removes_the_repositorys_own_workspace_directory(service, db
     service.delete(first.repository_id)
 
     assert not own_dir.exists(), "the repository's own directory is always removed"
-    assert Path(other.local_path).is_dir() and (Path(other.local_path) / "index.js").exists()
+    assert service.local_path_of(other).is_dir() and (service.local_path_of(other) / "index.js").exists()
     assert marker.read_text() == "keep me"
     assert service.get(other.repository_id).repository_id == other.repository_id
 
 
 def test_delete_accepts_local_path_below_the_own_directory(service, db, project):
     repository = service.register(str(project))
-    nested = Path(repository.local_path) / "app"
-    repository.local_path = str(nested)
+    nested = service.local_path_of(repository) / "app"
+    repository.local_path = str(nested)  # absolute legacy value still accepted
     db.commit()
     service.delete(repository.repository_id)
-    assert not Path(repository.local_path).exists() and not nested.parent.exists()
+    assert not nested.exists() and not nested.parent.exists()
 
 
 def test_local_directory_cannot_be_registered_twice_even_with_a_branch(service, project):

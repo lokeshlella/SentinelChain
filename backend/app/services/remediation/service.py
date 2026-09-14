@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.exceptions import NotFoundError, ValidationFailedError
 from app.core.logging import get_stage_logger
+from app.core.paths import resolve_workspace_path, to_workspace_relative
 from app.models import Finding, Remediation, Vulnerability
 from app.models.enums import RemediationStatus
 from app.services.agents.base import AgentError
@@ -96,7 +97,7 @@ class RemediationService:
                 )
 
             workspace = self.settings.workspace_path / "remediations" / str(rid)
-            create_working_copy(Path(repository.local_path or ""), workspace)
+            create_working_copy(resolve_workspace_path(repository.local_path, self.settings) or Path(""), workspace)
             change = get_modifier(dependency.source_file).apply(
                 workspace, dependency.source_file, dependency.package_name, dependency.version, target_version
             )
@@ -106,7 +107,7 @@ class RemediationService:
             remediation.recommendation = self._recommendation_text(result, note)
             remediation.confidence_score = result.confidence
             remediation.ai_result = ai_result_json
-            remediation.proposed_change = {**change.to_dict(), "workspace_path": str(workspace)}
+            remediation.proposed_change = {**change.to_dict(), "workspace_path": to_workspace_relative(workspace, self.settings)}
             remediation.status = RemediationStatus.PROPOSED
             self.db.commit()
             log.info("Remediation %d proposed: %s %s → %s in %s", rid, dependency.package_name, dependency.version, target_version, change.file)
@@ -134,8 +135,7 @@ class RemediationService:
 
     # ------------------------------------------------------------------ steps
 
-    @staticmethod
-    def _check_remediable(finding: Finding) -> None:
+    def _check_remediable(self, finding: Finding) -> None:
         dependency = finding.dependency
         if not dependency.version:
             raise ValidationFailedError(
@@ -143,7 +143,8 @@ class RemediationService:
             )
         get_modifier(dependency.source_file)  # raises for lock files / unsupported manifests
         repository = finding.analysis.repository
-        if not repository.local_path or not Path(repository.local_path).is_dir():
+        local = resolve_workspace_path(repository.local_path, self.settings) if repository.local_path else None
+        if local is None or not local.is_dir():
             raise ValidationFailedError(
                 "The repository working copy is missing; re-run the analysis with refresh=true",
                 details={"repository_id": repository.repository_id},
