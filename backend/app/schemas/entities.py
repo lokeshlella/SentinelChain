@@ -155,6 +155,8 @@ class FindingSummary(ORMModel):
 
 class FindingDetail(FindingSummary):
     usage_evidence: dict[str, Any] | None = None
+    # What the usage evidence means for this dependency: {kind, message, analysis_depth} (audit V2-02).
+    usage_verdict: dict[str, Any] | None = None
     reasoning: str | None = None
     ai_results: dict[str, Any] | None = None
     ai_error: str | None = None

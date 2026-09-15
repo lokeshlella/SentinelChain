@@ -12,6 +12,7 @@ from app.models.enums import AIStatus
 from app.services.jobs import expire_if_stale
 from app.models import Finding
 from app.schemas.entities import FindingDetail, FindingSummary, RemediationSummary, VulnerabilityDetail
+from app.services.analysis.usage import usage_verdict
 
 router = APIRouter(prefix="/findings", tags=["findings"])
 
@@ -26,6 +27,7 @@ def _get(db: Session, finding_id: int) -> Finding:
 def finding_detail(db: Session, finding: Finding) -> FindingDetail:
     base = finding_summary(finding)
     out = FindingDetail.model_validate(finding)
+    out.usage_verdict = usage_verdict(finding.usage_evidence, finding.dependency.direct_or_transitive).to_dict()
     out.dependency = base.dependency
     out.vulnerability = VulnerabilityDetail.model_validate(finding.vulnerability)
     out.repository = repository_summary(db, finding.analysis.repository)

@@ -48,6 +48,11 @@ IGNORED_DIRS: frozenset[str] = frozenset(
 #: reader never consumes more than this many bytes + 1 from any file, whatever
 #: ``stat`` reported.
 MAX_FILE_SIZE_BYTES = 1024 * 1024
+#: How many skipped (oversized / unreadable) file paths are kept in the evidence; the total is always kept.
+MAX_SKIPPED_FILES_REPORTED = 20
+#: What the evidence covers: direct import/require statements of the package itself. Use through
+#: another package (transitive), dynamic or generated imports and notebooks are outside this depth.
+ANALYSIS_DEPTH = "direct-import-scan"
 
 #: Snippets are single source lines, truncated so evidence stays compact.
 SNIPPET_MAX_LENGTH = 200
@@ -239,8 +244,13 @@ class UsageEvidence:
       them — it is bounded by the component list, not by the file count).
     * ``import_names`` — the import names actually observed; when nothing was found,
       the names the analyser searched for (so the reader knows what was looked up).
-    * ``truncated`` — a cap (files scanned, references, files reported) was hit or part
-      of the tree could not be read; evidence is partial.
+    * ``truncated`` — a cap (files scanned, references, files reported) was hit, part
+      of the tree could not be read, or an eligible file was skipped; evidence is partial.
+    * ``skipped_files`` — eligible source/manifest files that were **not** scanned
+      (larger than ``MAX_FILE_SIZE_BYTES`` or unreadable), capped at
+      ``MAX_SKIPPED_FILES_REPORTED``; ``skipped_files_total`` is the real count. A skipped
+      file may import the package, so any skip sets ``truncated`` (audit V2-03).
+    * ``analysis_depth`` — what the scan covers (:data:`ANALYSIS_DEPTH`): direct imports only.
     """
 
     package_name: str
@@ -252,10 +262,17 @@ class UsageEvidence:
     truncated: bool = False
     scanned_files: int = 0
     total_files: int = 0
+    skipped_files: list[str] = field(default_factory=list)
+    skipped_files_total: int = 0
+    analysis_depth: str = ANALYSIS_DEPTH
 
     def __post_init__(self) -> None:
         if self.total_files < len(self.files):
             self.total_files = len(self.files)
+        if self.skipped_files_total < len(self.skipped_files):
+            self.skipped_files_total = len(self.skipped_files)
+        if self.skipped_files_total:
+            self.truncated = True
 
     @property
     def import_references(self) -> list[UsageReference]:
@@ -281,6 +298,9 @@ class UsageEvidence:
             "truncated": self.truncated,
             "scanned_files": self.scanned_files,
             "total_files": self.total_files,
+            "skipped_files": list(self.skipped_files),
+            "skipped_files_total": self.skipped_files_total,
+            "analysis_depth": self.analysis_depth,
         }
 
     @classmethod
@@ -297,6 +317,9 @@ class UsageEvidence:
             truncated=bool(data.get("truncated", False)),
             scanned_files=int(data.get("scanned_files", 0) or 0),
             total_files=int(data.get("total_files", len(files)) or 0),
+            skipped_files=[str(f) for f in data.get("skipped_files", []) or []],
+            skipped_files_total=int(data.get("skipped_files_total", 0) or 0),
+            analysis_depth=str(data.get("analysis_depth") or ANALYSIS_DEPTH),
         )
 
     def to_context(self) -> UsageContext:
@@ -307,7 +330,79 @@ class UsageEvidence:
             files=list(self.files),
             components=list(self.components),
             truncated=self.truncated,
+            skipped_files=list(self.skipped_files),
+            skipped_files_total=self.skipped_files_total,
+            analysis_depth=self.analysis_depth,
         )
+
+
+# --------------------------------------------------------------------------- usage verdict
+
+#: ``UsageVerdict.kind`` values — what the evidence (or its absence) actually means.
+USAGE_USED = "used"  # at least one direct import was found
+USAGE_BEYOND_DEPTH = "beyond-depth"  # transitive dependency: direct imports are not expected
+USAGE_SCAN_INCOMPLETE = "scan-incomplete"  # no import found, but the scan did not cover the tree
+USAGE_UNKNOWN_SCOPE = "unknown-scope"  # no import found; direct or transitive cannot be told
+USAGE_NO_DIRECT_IMPORT = "no-direct-import"  # complete scan of a direct dependency found no import
+USAGE_NOT_ANALYSED = "not-analysed"  # no usage evidence was recorded
+
+
+@dataclass(frozen=True)
+class UsageVerdict:
+    """What "no usage found" means for one finding — never the bare "not referenced" (audit V2-02).
+
+    ``kind`` is one of the ``USAGE_*`` constants; ``message`` is the human-readable
+    explanation rendered by the prompts, the API, the evidence report and the UI.
+    """
+
+    kind: str
+    message: str
+    analysis_depth: str = ANALYSIS_DEPTH
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "message": self.message, "analysis_depth": self.analysis_depth}
+
+
+def usage_verdict(evidence: "UsageEvidence | dict | None", scope: str | None) -> UsageVerdict:
+    """Classify the usage evidence of a dependency with the given scope (``direct``/``transitive``/``unknown``).
+
+    "Not referenced by application code" is only ever concluded for a *direct* dependency
+    whose scan was *complete*; a transitive dependency is "beyond analysis depth", an
+    incomplete scan is "scan incomplete" and an unknown scope is said to be unknown.
+    """
+    if evidence is None:
+        return UsageVerdict(USAGE_NOT_ANALYSED, "No source-usage evidence was recorded for this finding.")
+    if isinstance(evidence, dict):
+        evidence = UsageEvidence.from_dict(evidence)
+    scope_text = (scope or "unknown").strip().lower()
+    if evidence.is_used:
+        count = evidence.total_files or len(evidence.files)
+        suffix = " (scan incomplete: more files may import it)" if evidence.truncated else ""
+        return UsageVerdict(USAGE_USED, f"Direct import found in {count} source file(s){suffix}.")
+    if scope_text == "transitive":
+        return UsageVerdict(
+            USAGE_BEYOND_DEPTH,
+            "Beyond analysis depth: the dependency is transitive (pulled in by another package), so the "
+            "application is not expected to import it directly; its use through the parent package was not analysed.",
+        )
+    if evidence.truncated:
+        skipped = evidence.skipped_files_total
+        detail = f"{skipped} eligible file(s) were not scanned" if skipped else "a scan limit was reached or part of the tree could not be read"
+        return UsageVerdict(
+            USAGE_SCAN_INCOMPLETE,
+            f"Scan incomplete: no direct import was found, but {detail}; absence of evidence is not evidence of non-use.",
+        )
+    if scope_text != "direct":
+        return UsageVerdict(
+            USAGE_UNKNOWN_SCOPE,
+            "No direct import found; the manifest cannot tell whether the dependency is direct or transitive, so use "
+            "through another package is possible and was not analysed.",
+        )
+    return UsageVerdict(
+        USAGE_NO_DIRECT_IMPORT,
+        "No direct import found in a complete scan of a direct dependency (dynamic imports and use through other "
+        "packages are not analysed).",
+    )
 
 
 # --------------------------------------------------------------------------- helpers
@@ -673,6 +768,7 @@ class SourceUsageAnalyzer:
         observed: set[str] = set()
         scanned = 0
         truncated = False
+        skipped: list[str] = []
 
         def on_walk_error(exc: OSError) -> None:
             nonlocal truncated
@@ -695,8 +791,11 @@ class SourceUsageAnalyzer:
                     "File cap reached (%d) while scanning for %s; usage evidence is partial", self.max_files, package_name
                 )
                 break
-            lines = self._read_lines(abs_path)
+            lines, skip_reason = self._read_lines(abs_path)
             if lines is None:
+                if skip_reason is not None:  # an eligible file we could not scan: the evidence is partial
+                    skipped.append(rel_path.as_posix())
+                    logger.warning("Skipping %s while scanning for %s: %s", rel_path, package_name, skip_reason)
                 continue
             scanned += 1
             self._scan_lines(matcher, rel_path.as_posix(), lines, is_source, is_manifest, import_refs, config_refs, observed)
@@ -727,12 +826,14 @@ class SourceUsageAnalyzer:
             references=references,
             files=files,
             components=sorted(components),
-            truncated=truncated,
+            truncated=truncated or bool(skipped),
             scanned_files=scanned,
             total_files=len(all_files),
+            skipped_files=skipped[:MAX_SKIPPED_FILES_REPORTED],
+            skipped_files_total=len(skipped),
         )
         logger.info(
-            "%s (%s): %d import reference(s) in %d file(s), %d config reference(s), components=%s, scanned %d files%s",
+            "%s (%s): %d import reference(s) in %d file(s), %d config reference(s), components=%s, scanned %d files%s%s",
             package_name,
             eco.value,
             len(import_refs),
@@ -740,7 +841,8 @@ class SourceUsageAnalyzer:
             len(config_refs),
             evidence.components or "[]",
             scanned,
-            " (truncated)" if truncated else "",
+            f", skipped {len(skipped)}" if skipped else "",
+            " (truncated)" if evidence.truncated else "",
         )
         return evidence
 
@@ -762,30 +864,35 @@ class SourceUsageAnalyzer:
                 yield abs_path, PurePosixPath(abs_path.relative_to(root).as_posix())
 
     @staticmethod
-    def _read_lines(path: Path) -> list[str] | None:
-        """Lines of a regular text file; None when it is not a regular file, too large or unreadable.
+    def _read_lines(path: Path) -> tuple[list[str] | None, str | None]:
+        """``(lines, skip_reason)`` for a regular text file.
+
+        ``lines`` is None when the file was not read. ``skip_reason`` is set only for
+        *eligible* files the scan could not cover — larger than ``MAX_FILE_SIZE_BYTES``
+        or unreadable — which makes the evidence partial (audit V2-03); it stays None
+        for symlinks and non-regular files, which are skipped by design.
 
         Symlinks are not followed (a link may point anywhere, including outside the
         working copy or at a device / FIFO whose ``st_size`` is 0) and at most
         ``MAX_FILE_SIZE_BYTES + 1`` bytes are ever read, whatever ``lstat`` reported.
         """
+        too_large = f"larger than {MAX_FILE_SIZE_BYTES} bytes (not scanned)"
         try:
             st = os.lstat(path)
             if stat.S_ISLNK(st.st_mode):
                 logger.debug("Skipping %s: symbolic link", path)
-                return None
+                return None, None
             if not stat.S_ISREG(st.st_mode):
                 logger.debug("Skipping %s: not a regular file", path)
-                return None
+                return None, None
             if st.st_size > MAX_FILE_SIZE_BYTES:
-                logger.debug("Skipping %s: larger than %d bytes", path, MAX_FILE_SIZE_BYTES)
-                return None
+                return None, too_large
             flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
             fd = os.open(path, flags)
             try:
                 if not stat.S_ISREG(os.fstat(fd).st_mode):  # replaced between lstat and open
                     logger.debug("Skipping %s: not a regular file", path)
-                    return None
+                    return None, None
                 with os.fdopen(fd, "rb") as handle:
                     fd = -1  # owned by the handle now
                     data = handle.read(MAX_FILE_SIZE_BYTES + 1)
@@ -793,12 +900,10 @@ class SourceUsageAnalyzer:
                 if fd >= 0:
                     os.close(fd)
             if len(data) > MAX_FILE_SIZE_BYTES:
-                logger.debug("Skipping %s: larger than %d bytes", path, MAX_FILE_SIZE_BYTES)
-                return None
-            return split_lines(data.decode("utf-8-sig", errors="ignore"))
+                return None, too_large
+            return split_lines(data.decode("utf-8-sig", errors="ignore")), None
         except OSError as exc:
-            logger.debug("Skipping %s: %s", path, exc)
-            return None
+            return None, f"unreadable ({exc.strerror or exc})"
 
     @staticmethod
     def _scan_lines(

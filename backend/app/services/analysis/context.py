@@ -18,7 +18,7 @@ from app.services.agents.schemas import (
     UsageContext,
     VulnerabilityContext,
 )
-from app.services.analysis.usage import UsageEvidence
+from app.services.analysis.usage import UsageEvidence, usage_verdict
 from app.services.repository.analyzer import RepositoryProfile
 
 log = get_stage_logger("AI")
@@ -61,6 +61,8 @@ def build_finding_context(finding: Finding, graph_service) -> FindingContext:
         if finding.usage_evidence
         else UsageContext(components=list(finding.affected_components or []))
     )
+    verdict = usage_verdict(finding.usage_evidence, dep.direct_or_transitive)
+    usage_ctx.verdict_kind, usage_ctx.verdict = verdict.kind, verdict.message
     try:
         graph_ctx = graph_service.dependency_context(dep) if graph_service is not None else GraphContext(available=False)
     except Exception as exc:  # noqa: BLE001 - the graph is optional evidence

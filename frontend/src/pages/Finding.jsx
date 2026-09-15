@@ -142,6 +142,10 @@ export default function Finding() {
   const vuln = finding.vulnerability || {}
   const usage = finding.usage_evidence && typeof finding.usage_evidence === 'object' ? finding.usage_evidence : {}
   const references = asList(usage.references)
+  // What "no usage" means for this dependency (beyond depth / scan incomplete / unknown scope / no direct import).
+  const verdict = finding.usage_verdict && typeof finding.usage_verdict === 'object' ? finding.usage_verdict : null
+  const skippedFiles = asList(usage.skipped_files)
+  const skippedTotal = usage.skipped_files_total ?? skippedFiles.length
   const ai = finding.ai_results && typeof finding.ai_results === 'object' ? finding.ai_results : null
   const depAnalysis = ai?.dependency_analysis || null
   const impact = ai?.impact || null
@@ -225,22 +229,29 @@ export default function Finding() {
         </Section>
       </div>
 
-      <Section title="Evidence — Observed facts" subtitle="Deterministic results of the source-usage scan: files and lines that reference the package, and the components they belong to.">
+      <Section title="Evidence — Observed facts" subtitle="Deterministic results of the source-usage scan (direct import/require statements only): files and lines that reference the package, and the components they belong to.">
+        {verdict?.message && (
+          <p className={verdict.kind === 'used' ? 'small' : 'small warn'}>
+            <StatusBadge value={verdict.kind} /> {verdict.message}
+          </p>
+        )}
         <KeyValue
           columns={4}
           items={[
             { label: 'Import names', value: asList(usage.import_names).length ? asList(usage.import_names).map((n) => <code key={n} className="chip">{n}</code>) : null },
             { label: 'Files referencing', value: asList(usage.files).length },
             { label: 'Files scanned', value: usage.scanned_files },
-            { label: 'Truncated', value: usage.truncated === undefined ? null : (usage.truncated ? 'yes' : 'no') },
-            { label: 'Affected components', value: asList(finding.affected_components).length ? asList(finding.affected_components).map((c) => <code key={c} className="chip">{c}</code>) : <span className="muted">none (no direct import found; transitive and dynamic use are not analysed)</span> },
+            { label: 'Scan complete', value: usage.truncated === undefined ? null : (usage.truncated ? 'no (partial evidence)' : 'yes') },
+            { label: 'Files not scanned', value: skippedTotal ? <span>{skippedTotal} (larger than 1 MB or unreadable): {skippedFiles.map((f) => <code key={f} className="chip warn">{f}</code>)}</span> : 'none' },
+            { label: 'Analysis depth', value: <code className="chip">{usage.analysis_depth || verdict?.analysis_depth || 'direct-import-scan'}</code> },
+            { label: 'Affected components', value: asList(finding.affected_components).length ? asList(finding.affected_components).map((c) => <code key={c} className="chip">{c}</code>) : <span className="muted">{verdict?.kind === 'beyond-depth' ? 'none identified (beyond analysis depth)' : 'none identified (no direct import found)'}</span> },
           ]}
         />
         <Table
           compact
           rows={references}
           rowKey={(r, i) => `${r.file}-${r.line}-${i}`}
-          empty="No direct import of this package was found. Use through other packages, dynamic imports and notebooks are not analysed, so this is not evidence that the package is unused."
+          empty={verdict?.message || 'No direct import of this package was found; transitive and dynamic use are not analysed.'}
           columns={[
             { key: 'file', label: 'File', render: (r) => <span className="mono small">{r.file}</span> },
             { key: 'line', label: 'Line' },
