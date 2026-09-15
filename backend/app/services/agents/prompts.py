@@ -22,9 +22,30 @@ from app.services.agents.schemas import (
     ImpactAssessmentResult,
     RiskAssessmentResult,
 )
+from app.services.analysis.risk import provisional_risk_from_severity
 
 MAX_PROMPT_CHARS = 6000
 LEVEL_VALUES = "CRITICAL, HIGH, MEDIUM, LOW, NONE, UNKNOWN"
+LEVEL_VALUES_WITHOUT_NONE = "CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN"
+
+# What the usage scanner does and does not see - stated to the agents whenever no direct
+# import was found, so that absence of evidence is never presented as evidence of absence
+# (audit V2-01).
+NO_DIRECT_IMPORT_FACT = "no direct import of '{pkg}' was found in the repository's own source files"
+USAGE_SCAN_LIMITS = (
+    "the scanner only finds import/require statements of the package itself; use through another "
+    "package (transitive), dynamic or generated imports and notebooks are NOT analysed - the absence "
+    "of a direct import is NOT evidence that the package is unused"
+)
+SCOPE_NOTES = {
+    "direct": "direct (declared by the repository itself)",
+    "transitive": "transitive (pulled in by another dependency; the application code is not expected to import it directly)",
+    "unknown": "unknown (the manifest cannot tell whether it is direct or transitive)",
+}
+
+
+def describe_scope(scope: str | None) -> str:
+    return SCOPE_NOTES.get((scope or "unknown").lower(), f"{scope} (unrecognised scope)")
 
 SYSTEM_PROMPT = """You are Sentinel Chain, a senior software supply-chain security analyst.
 You analyse ONE vulnerable dependency of ONE application at a time and answer with structured JSON.
@@ -120,7 +141,7 @@ def _dependency_section(ctx: FindingContext) -> str:
         [
             f"- package: {dep.package_name} ({dep.ecosystem})",
             f"- installed version: {version}",
-            f"- scope: {dep.scope}",
+            f"- scope: {describe_scope(dep.scope)}",
             f"- declared in: {dep.source_file}",
         ],
     )
@@ -151,10 +172,10 @@ def _usage_section(ctx: FindingContext, limits: _Limits) -> str:
     usage = ctx.usage
     pkg = ctx.dependency.package_name
     if not usage.references and not usage.files and not usage.components:
-        return _section(
-            "SOURCE USAGE EVIDENCE (FACTS)",
-            [f"- no import or reference to '{pkg}' was found in the repository's own source files"],
-        )
+        lines = [f"- {NO_DIRECT_IMPORT_FACT.format(pkg=pkg)}", f"- limits: {USAGE_SCAN_LIMITS}"]
+        if usage.truncated:
+            lines.append("- note: the scanner stopped early (file or size cap); the scan is incomplete")
+        return _section("SOURCE USAGE EVIDENCE (FACTS)", lines)
     lines = [
         f"- import names searched: {_join_capped(usage.import_names, 6)}",
         f"- files referencing the package ({len(usage.files)}): {_join_capped(usage.files, limits.files)}",
@@ -300,13 +321,22 @@ def build_impact_prompt(ctx: FindingContext, dependency_analysis: DependencyAnal
         level_rule = f'- "impact_level": one of {LEVEL_VALUES}. Use UNKNOWN if the evidence is insufficient.'
     else:
         components_rule = (
-            '- "affected_components": MUST be an empty list [] because no source file references the package '
-            "(FACT). Do not list any component."
+            '- "affected_components": MUST be an empty list [] because no source file was found to import the '
+            "package (FACT). Do not list any component."
         )
-        level_rule = (
-            f'- "impact_level": one of {LEVEL_VALUES}. The package is declared but no source file references it, '
-            "so choose NONE, LOW or UNKNOWN and say why."
-        )
+        scope = (ctx.dependency.scope or "unknown").lower()
+        if scope == "direct" and not ctx.usage.truncated:
+            level_rule = (
+                f'- "impact_level": one of {LEVEL_VALUES_WITHOUT_NONE}. No direct import was found, but {USAGE_SCAN_LIMITS}; '
+                "choose LOW or UNKNOWN and say why. NONE is not allowed."
+            )
+        else:
+            level_rule = (
+                f'- "impact_level": one of {LEVEL_VALUES_WITHOUT_NONE}. No direct import was found, but the dependency '
+                f"is {describe_scope(scope)}{' and the scan is incomplete' if ctx.usage.truncated else ''}, so the "
+                "package may well be used through other code that was not analysed: use UNKNOWN unless the "
+                "evidence shows otherwise. NONE is not allowed."
+            )
     task = f"""ALLOWED COMPONENTS (affected_components may ONLY contain names from this list): {allowed_text}
 COMPONENTS WITH SOURCE REFERENCES TO THE PACKAGE (FACT): {using_text}
 COMPONENTS WITHOUT EVIDENCE OF USE (FACT - do not list them as affected): {unevidenced_text}
@@ -333,12 +363,24 @@ def build_risk_prompt(
     impact: ImpactAssessmentResult | None,
 ) -> str:
     """Prompt for :class:`RiskEvaluationAgent` → ``RiskAssessmentResult``."""
+    provisional = provisional_risk_from_severity(ctx.vulnerability.severity)
+    if provisional == "UNKNOWN":
+        floor_rule = (
+            f'- "risk_level": one of {LEVEL_VALUES}. The advisory carries no severity, so there is no floor; '
+            "use UNKNOWN only when the evidence is insufficient."
+        )
+    else:
+        floor_rule = (
+            f'- "risk_level": one of {LEVEL_VALUES}. FLOOR: the severity alone already makes this {provisional}; '
+            f"you may raise the level above {provisional} when the application context warrants it, but never "
+            f"lower it - no evidence available to you proves that the vulnerable code is unreachable."
+        )
     task = f"""TASK: Evaluate the overall risk of vulnerability {ctx.vulnerability.identifier} in dependency {ctx.dependency.package_name} for THIS application.
-Consider: the vulnerability severity and details (FACT), whether the package is actually referenced by the application code (FACT), the assessed impact (previous step), whether a fixed version exists (FACT), and how exploitable the issue is (INFERENCE).
+Consider: the vulnerability severity and details (FACT), whether a direct import of the package was found (FACT; the absence of one is not proof of non-use - transitive and dynamic use are not analysed), the assessed impact (previous step), whether a fixed version exists (FACT), and how exploitable the issue is (INFERENCE).
 Fill the keys in this order:
 - "factors": 3-6 short statements, each starting with "FACT:" or "INFERENCE:", that drive the risk level.
 - "reasoning": 2-4 sentences explaining the risk level.
-- "risk_level": one of {LEVEL_VALUES}. Use UNKNOWN only when the evidence is insufficient.
+{floor_rule}
 - "confidence": a number between 0 and 1.
 
 Return ONLY this JSON object:

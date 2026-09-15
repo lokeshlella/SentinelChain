@@ -18,6 +18,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationFailedError
 from app.core.logging import get_stage_logger
 from app.core.paths import resolve_workspace_path
+from app.core.redaction import redact_secrets
 from app.models import PullRequest, Remediation, Validation
 from app.models.enums import CheckResult, PullRequestStatus, RemediationStatus, ValidationStatus
 from app.services.github.base import GitProvider, PullRequestResult, PullRequestSpec
@@ -278,7 +279,9 @@ def build_pr_body(remediation: Remediation, validation: Validation, report_path:
         "",
         FOOTER,
     ]
-    return "\n".join(lines)
+    # The body is pushed to GitHub: never let a credential from the manifest through, even
+    # from rows stored before proposed changes were redacted at source (audit V2-04).
+    return redact_secrets("\n".join(lines)) or ""
 
 
 def _labelled(label: str, text: str) -> str:

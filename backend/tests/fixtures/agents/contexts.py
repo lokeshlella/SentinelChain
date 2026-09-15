@@ -29,6 +29,9 @@ def make_context(
     references: list[UsageReferenceContext] | None = None,
     graph_available: bool = True,
     description: str | None = None,
+    scope: str = "unknown",
+    truncated: bool = False,
+    severity: str = "MEDIUM",
 ) -> FindingContext:
     usage_components = ["src/app"] if usage_components is None else usage_components
     repo_components = ["src/app", "tests"] if repo_components is None else repo_components
@@ -53,13 +56,13 @@ def make_context(
             ecosystem="PyPI",
             version="2.25.1",
             version_spec="==2.25.1",
-            scope="unknown",
+            scope=scope,
             source_file="requirements.txt",
         ),
         vulnerability=VulnerabilityContext(
             identifier=GHSA_ID,
             aliases=["CVE-2023-32681", "PYSEC-2023-74"],
-            severity="MEDIUM",
+            severity=severity,
             cvss_score=6.1,
             summary="Unintended leak of Proxy-Authorization header in requests",
             description=description
@@ -74,7 +77,7 @@ def make_context(
             references=references,
             files=files,
             components=usage_components,
-            truncated=False,
+            truncated=truncated,
         ),
         graph=GraphContext(
             available=graph_available,

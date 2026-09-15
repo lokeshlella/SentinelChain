@@ -22,11 +22,17 @@ from app.core.logging import get_stage_logger
 from app.core.paths import resolve_workspace_path
 from app.db.base import utcnow
 from app.models import Analysis, Dependency, DependencyRelation, Finding, Repository, Vulnerability
-from app.models.enums import AIStatus, AnalysisStatus, RiskLevel, StageStatus
+from app.models.enums import AIStatus, AnalysisStatus, ImpactLevel, RiskLevel, StageStatus
 from app.services.agents.orchestrator import AIOrchestrator
 from app.services.agents.schemas import FindingAIResult, FindingContext
 from app.services.analysis.context import build_finding_context
-from app.services.analysis.risk import aggregate_overall_risk, sort_findings_by_priority
+from app.services.analysis.risk import (
+    aggregate_overall_risk,
+    floor_risk_level,
+    normalise_risk_level,
+    provisional_risk_from_severity,
+    sort_findings_by_priority,
+)
 from app.services.analysis.usage import SourceUsageAnalyzer, UsageEvidence
 from app.services.dependencies.service import DependencyService
 from app.services.knowledge_graph.service import KnowledgeGraphService
@@ -350,11 +356,31 @@ class AnalysisPipeline:
         finding.ai_results = result.model_dump(mode="json")
         finding.ai_status = {"COMPLETED": AIStatus.COMPLETED, "FAILED": AIStatus.FAILED}.get(result.status, AIStatus.UNAVAILABLE)
         finding.ai_error = "; ".join(f"{f.agent}: {f.error}" for f in result.failures) or None
+        guard_notes: list[str] = []
+        # Audit V2-01: the agents judge; they cannot prove that a vulnerable package is unreachable
+        # (the usage scan sees direct imports only), so their verdicts may raise the stored
+        # levels but never lower them below what the severity alone warrants. The raw verdicts
+        # stay in ``ai_results``; the guard notes explain any difference.
         if result.impact is not None:
-            finding.impact_level = result.impact.impact_level
-        if result.risk is not None and result.risk.risk_level != RiskLevel.UNKNOWN:
-            finding.risk_level = result.risk.risk_level
-        finding.reasoning = compose_reasoning(result)
+            impact = result.impact.impact_level
+            if impact == ImpactLevel.NONE:
+                impact = ImpactLevel.UNKNOWN
+                guard_notes.append(
+                    f"Impact guard: the model judged NONE, stored as UNKNOWN. {IMPACT_GUARD_REASON}"
+                )
+            finding.impact_level = impact
+        if result.risk is not None:
+            provisional = provisional_risk_from_severity(getattr(finding.vulnerability, "severity", None))
+            judged = normalise_risk_level(result.risk.risk_level)
+            stored = floor_risk_level(judged, provisional)
+            if judged is not RiskLevel.UNKNOWN and stored is not judged:
+                guard_notes.append(
+                    f"Risk floor: the model judged {judged}, stored as {stored} (the severity-derived level). "
+                    f"{RISK_FLOOR_REASON}"
+                )
+            if judged is not RiskLevel.UNKNOWN or finding.risk_level is None:
+                finding.risk_level = stored
+        finding.reasoning = compose_reasoning(result, guard_notes)
 
     # ------------------------------------------------------------------ helpers
 
@@ -391,8 +417,21 @@ class AnalysisPipeline:
         self.db.commit()
 
 
-def compose_reasoning(result: FindingAIResult) -> str:
-    """Human-readable, clearly labelled summary of the agent chain (INFERENCE, not fact)."""
+IMPACT_GUARD_REASON = (
+    "Sentinel Chain cannot establish that a vulnerable package has no impact: the usage scan finds direct "
+    "imports only, and use through other packages or dynamic imports is not analysed."
+)
+RISK_FLOOR_REASON = (
+    "Sentinel Chain never lowers the risk below the severity-derived level because it cannot prove that "
+    "the vulnerable code is unreachable; the AI judgement is kept in the evidence for review."
+)
+
+
+def compose_reasoning(result: FindingAIResult, guard_notes: Iterable[str] = ()) -> str:
+    """Human-readable, clearly labelled summary of the agent chain (INFERENCE, not fact).
+
+    ``guard_notes`` records where the stored levels differ from the model's verdicts.
+    """
     parts: list[str] = []
     if result.dependency_analysis:
         parts.append(f"Dependency analysis: {result.dependency_analysis.summary}")
@@ -403,6 +442,7 @@ def compose_reasoning(result: FindingAIResult) -> str:
         parts.append(f"Risk ({result.risk.risk_level}): {result.risk.reasoning}" + (f" Factors: {factors}" if factors else ""))
     if result.failures:
         parts.append("Agent failures: " + "; ".join(f"{f.agent} — {f.error}" for f in result.failures))
+    parts.extend(guard_notes)
     return "\n".join(parts)
 
 

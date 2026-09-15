@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError, SentinelError
 from app.core.logging import get_stage_logger
+from app.core.redaction import redact_secrets
 from app.core.versions import normalize_package_name
 from app.db.base import utcnow
 from app.models import (
@@ -43,9 +44,9 @@ from app.models import (
     Vulnerability,
 )
 from app.services.sandbox.service import is_partial_pass
-from app.models.enums import AIStatus, CheckResult, RemediationStatus, RiskLevel, StageStatus, ValidationStatus
+from app.models.enums import AIStatus, CheckResult, ImpactLevel, RemediationStatus, RiskLevel, StageStatus, ValidationStatus
 from app.services.analysis.context import fixed_versions_for
-from app.services.analysis.risk import provisional_risk_from_severity
+from app.services.analysis.risk import provisional_risk_from_severity, risk_rank
 from app.services.analysis.usage import UsageEvidence
 from app.services.reports.markdown import escape_table_cell, render_value
 from app.services.repository.analyzer import RepositoryProfile
@@ -81,6 +82,7 @@ Decision = Literal["Apply", "Apply with manual testing", "Do not apply yet", "An
 
 RISK_ORIGIN_AI = "AI"
 RISK_ORIGIN_PROVISIONAL = "provisional (severity-based)"
+RISK_ORIGIN_FLOOR = "provisional floor (AI judged lower)"
 
 NO_REMEDIATION_NOTE = "No remediation generated yet"
 NO_VALIDATION_NOTE = "No validation run yet"
@@ -485,11 +487,22 @@ def impact_section(finding: Finding) -> ReportSection:
     facts = {
         "components_referencing_dependency": list(finding.affected_components or []),
         "files_referencing_dependency": list((finding.usage_evidence or {}).get("files") or []),
+        "stored_impact_level": finding.impact_level,
         "ai_status": finding.ai_status,
     }
     notes = _ai_status_notes(finding, "impact assessment", impact is not None)
+    if not facts["files_referencing_dependency"]:
+        notes.append(
+            "No direct import of the package was found; use through other packages, dynamic imports and "
+            "notebooks are not analysed, so this is not evidence that the package is unused"
+        )
     reasoning = None
     if impact is not None:
+        if impact.get("impact_level") == ImpactLevel.NONE and finding.impact_level != ImpactLevel.NONE:
+            notes.append(
+                f"The AI judged the impact NONE but the stored level is {finding.impact_level}: Sentinel Chain cannot "
+                "establish that a vulnerable package has no impact"
+            )
         reasoning = {
             "impact_level": impact.get("impact_level"),
             "affected_components": list(impact.get("affected_components") or []),
@@ -517,6 +530,9 @@ def risk_section(finding: Finding) -> ReportSection:
     ai_level = str(risk.get("risk_level")) if risk and risk.get("risk_level") else None
     if ai_level and ai_level != RiskLevel.UNKNOWN and finding.risk_level == ai_level:
         level, origin = ai_level, RISK_ORIGIN_AI
+    elif ai_level and ai_level != RiskLevel.UNKNOWN and finding.risk_level and risk_rank(ai_level) < risk_rank(finding.risk_level):
+        # audit V2-01: the model judged below the severity-derived level; the floor was kept
+        level, origin = finding.risk_level, RISK_ORIGIN_FLOOR
     else:
         level, origin = (finding.risk_level or provisional), RISK_ORIGIN_PROVISIONAL
     facts = {
@@ -540,6 +556,12 @@ def risk_section(finding: Finding) -> ReportSection:
     notes = _ai_status_notes(finding, "risk assessment", risk is not None)
     if origin == RISK_ORIGIN_PROVISIONAL:
         notes.append("The risk level is provisional: it is derived from the vulnerability severity, not from an AI judgement")
+    elif origin == RISK_ORIGIN_FLOOR:
+        notes.append(
+            f"The AI judged the risk {ai_level} but the stored level is {level}: Sentinel Chain never lowers the risk "
+            "below the severity-derived level because it cannot prove that the vulnerable code is unreachable "
+            "(the usage scan finds direct imports only)"
+        )
     return _section(7, observed_facts=facts, ai_reasoning=reasoning, notes=notes)
 
 
@@ -737,7 +759,8 @@ def _proposed_change(change: dict[str, Any] | None) -> dict[str, Any] | None:
     return {
         "file": change.get("file"),
         "line_number": change.get("line_number"),
-        "diff": change.get("diff"),
+        # redacted at source since audit V2-04; applied again for rows stored before that
+        "diff": redact_secrets(change.get("diff")),
     }
 
 

@@ -91,12 +91,34 @@ def provisional_risk_from_severity(severity: str | Severity | None) -> RiskLevel
     return RiskLevel(sev.value)
 
 
+def floor_risk_level(judged: str | RiskLevel | None, provisional: str | RiskLevel | None) -> RiskLevel:
+    """The risk level to store for a finding once the AI has judged it (audit V2-01).
+
+    The agent may *raise* the risk above the severity-derived level (application
+    context can make a MEDIUM advisory HIGH) but never lower it: V1 has no
+    reachability evidence — the usage scan finds direct imports only, transitive
+    and dynamic use are not analysed — so "no source file references the package"
+    can never prove that the vulnerable code does not run. A judged UNKNOWN keeps
+    the provisional level.
+    """
+    judged_level = normalise_risk_level(judged)
+    provisional_level = normalise_risk_level(provisional)
+    if judged_level is RiskLevel.UNKNOWN:
+        return provisional_level
+    return judged_level if risk_rank(judged_level) >= risk_rank(provisional_level) else provisional_level
+
+
 def effective_risk_level(finding: Finding) -> RiskLevel:
-    """The AI risk level when the agent set one, else the provisional level from severity."""
-    if finding.risk_level:
-        return normalise_risk_level(finding.risk_level)
+    """The risk a finding counts as: the stored level, never below the severity-derived one.
+
+    The floor is applied on read as well as on write so that rows stored before the
+    floor existed (audit V2-01) cannot lower an analysis' overall risk either.
+    """
     vulnerability = getattr(finding, "vulnerability", None)
-    return provisional_risk_from_severity(getattr(vulnerability, "severity", None))
+    provisional = provisional_risk_from_severity(getattr(vulnerability, "severity", None))
+    if finding.risk_level:
+        return floor_risk_level(finding.risk_level, provisional)
+    return provisional
 
 
 def aggregate_overall_risk(findings: Iterable[Finding]) -> RiskLevel:

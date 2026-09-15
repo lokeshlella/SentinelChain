@@ -65,7 +65,9 @@ def test_dependency_prompt_renders_all_evidence_sections():
 def test_prompt_without_usage_evidence_says_so_and_graph_unavailable_is_explicit():
     ctx = make_context(usage_components=[], references=[], graph_available=False)
     prompt = build_dependency_analysis_prompt(ctx)
-    assert "no import or reference to 'requests' was found" in prompt
+    assert "no direct import of 'requests' was found" in prompt
+    # audit V2-01: absence of a direct import is never presented as evidence of non-use
+    assert "NOT evidence that the package is unused" in prompt
     assert "knowledge graph unavailable" in prompt
     assert "references (" not in prompt
 
@@ -99,7 +101,52 @@ def test_impact_prompt_rules_depend_on_usage_evidence():
 
     without_usage = build_impact_prompt(make_context(usage_components=[], references=[]), None)
     assert '"affected_components": MUST be an empty list []' in without_usage
-    assert "choose NONE, LOW or UNKNOWN" in without_usage
+    assert "NONE is not allowed" in without_usage
+    assert "choose NONE" not in without_usage
+
+
+# ---------------------------------------------------------------- audit V2-01: no fail-open wording
+
+
+def test_impact_rule_without_usage_depends_on_scope_and_scan_completeness():
+    direct = build_impact_prompt(make_context(usage_components=[], references=[], scope="direct"), None)
+    assert "choose LOW or UNKNOWN and say why. NONE is not allowed." in direct
+    assert "use UNKNOWN unless the evidence shows otherwise" not in direct
+
+    transitive = build_impact_prompt(make_context(usage_components=[], references=[], scope="transitive"), None)
+    assert "the dependency is transitive (pulled in by another dependency" in transitive
+    assert "use UNKNOWN unless the evidence shows otherwise. NONE is not allowed." in transitive
+
+    unknown = build_impact_prompt(make_context(usage_components=[], references=[], scope="unknown"), None)
+    assert "the manifest cannot tell whether it is direct or transitive" in unknown
+    assert "use UNKNOWN unless the evidence shows otherwise" in unknown
+
+    truncated = build_impact_prompt(make_context(usage_components=[], references=[], scope="direct", truncated=True), None)
+    assert "and the scan is incomplete" in truncated
+    assert "use UNKNOWN unless the evidence shows otherwise" in truncated
+    assert "the scanner stopped early (file or size cap); the scan is incomplete" in truncated
+
+
+def test_dependency_section_explains_the_scope():
+    assert "- scope: transitive (pulled in by another dependency" in build_dependency_analysis_prompt(make_context(scope="transitive"))
+    assert "- scope: direct (declared by the repository itself)" in build_dependency_analysis_prompt(make_context(scope="direct"))
+    assert "- scope: unknown (the manifest cannot tell" in build_dependency_analysis_prompt(make_context())
+
+
+def test_risk_prompt_states_the_severity_floor_and_that_no_import_is_not_proof():
+    dep, impact, _ = prior_results()
+    prompt = build_risk_prompt(make_context(usage_components=[], references=[]), dep, impact)
+    assert "FLOOR: the severity alone already makes this MEDIUM" in prompt
+    assert "never lower it" in prompt
+    assert "the absence of one is not proof of non-use" in prompt
+    assert "actually referenced by the application code" not in prompt
+
+    high = build_risk_prompt(make_context(severity="HIGH"), dep, impact)
+    assert "FLOOR: the severity alone already makes this HIGH" in high
+
+    unrated = build_risk_prompt(make_context(severity="UNKNOWN"), dep, impact)
+    assert "FLOOR" not in unrated
+    assert "The advisory carries no severity, so there is no floor" in unrated
 
 
 def test_allowed_component_names_is_union_in_evidence_order_without_duplicates():

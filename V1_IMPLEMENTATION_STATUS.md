@@ -23,7 +23,7 @@ tests + 20 integration tests, all passing._
 | Source usage identified | ✅ | `weather.py:12`, `test_weather.py:5`, `format.js:6` |
 | Ollama analyses a finding | ✅ | dependency / impact / risk agents, structured JSON, FACT vs INFERENCE |
 | Impact assessment | ✅ | guardrail drops components not in the evidence |
-| Risk assessment | ✅ | provisional severity-based risk until the AI result exists |
+| Risk assessment | ✅ | provisional severity-based risk until the AI result exists; the AI may raise it but never lower it below the severity-derived level, and a NONE impact is stored as UNKNOWN (audit V2-01) |
 | Remediation recommendation | ✅ | OSV fixed versions → registry → OSV re-check → LLM choice (or deterministic fallback) |
 | Modification in a temporary workspace | ✅ | `workspace/remediations/<id>`, unified diff stored |
 | Docker validation | ✅ | isolated container, install + tests + OSV re-scan; `PASS/FAIL/SKIPPED/UNKNOWN` |
@@ -76,6 +76,17 @@ tests + 20 integration tests, all passing._
   vulnerability / versions / impact / risk / validation / diff / checklist, manual instructions).
 * **API & UI** — 33 REST endpoints with typed errors, background execution + polling; React
   dashboard covering the whole workflow, facts and inferences labelled everywhere.
+* **No fail-open on missing usage evidence** — the usage scan finds direct imports only, so
+  "no source file references the package" is never presented to the agents as proof of
+  non-use: the prompts state the scan's limits and the dependency scope, the risk agent is told
+  the severity-derived floor, and `pipeline._store_ai_result` never stores a risk below that
+  floor (or an impact of NONE); the raw verdicts stay in `ai_results` and the difference is
+  explained in the reasoning, the report (`risk_origin = provisional floor`) and the UI (audit V2-01).
+* **Credential redaction** — `core/redaction.py`: URL userinfo, `_authToken`/`password`-style
+  assignments and well-known token shapes found in manifests are redacted from dependency
+  `version_spec`, extraction warnings, the stored/served proposed change, the evidence report
+  and the pull request body; the working copy that is installed and pushed keeps the real
+  content (audit V2-04).
 * **Working-copy hardening** — `repository/git_safety.py`: hooks are never copied,
   `.git/config` is reduced to an allow-list, `.git` symlinks/gitdir pointers are severed, and
   all git commands run with hook/fsmonitor/helper overrides and `--no-verify` (audit F-02).
