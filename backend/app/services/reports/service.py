@@ -47,7 +47,7 @@ from app.services.sandbox.service import is_partial_pass
 from app.models.enums import AIStatus, CheckResult, ImpactLevel, RemediationStatus, RiskLevel, StageStatus, ValidationStatus
 from app.services.analysis.context import fixed_versions_for
 from app.services.analysis.risk import provisional_risk_from_severity, risk_rank
-from app.services.analysis.usage import UsageEvidence
+from app.services.analysis.usage import UsageEvidence, usage_verdict
 from app.services.reports.markdown import escape_table_cell, render_value
 from app.services.repository.analyzer import RepositoryProfile
 
@@ -462,19 +462,23 @@ def evidence_section(finding: Finding, relations: dict[str, list[str]]) -> Repor
         "api": f"/api/dependencies/{finding.dependency_id}/graph",
     }
     notes: list[str] = []
+    verdict = usage_verdict(finding.usage_evidence, finding.dependency.direct_or_transitive)
     if finding.usage_evidence:
         evidence = UsageEvidence.from_dict(finding.usage_evidence)
         facts = _usage_facts(evidence)
         if not evidence.is_used:
+            notes.append(verdict.message)
+        if evidence.skipped_files_total:
             notes.append(
-                "No import of the package was observed in the repository's own source files "
-                "(it is declared in a dependency file only)"
+                f"{evidence.skipped_files_total} eligible file(s) larger than 1 MB or unreadable were not scanned "
+                f"({', '.join(evidence.skipped_files[:5])}{', ...' if evidence.skipped_files_total > 5 else ''})"
             )
         if evidence.truncated:
-            notes.append("Usage evidence is partial: a scan limit was reached or part of the tree could not be read")
+            notes.append("Usage evidence is partial: a scan limit was reached, a file was skipped or part of the tree could not be read")
     else:
         facts = {"affected_components": list(finding.affected_components or [])}
-        notes.append("No source-usage evidence was recorded for this finding")
+        notes.append(verdict.message)
+    facts["usage_verdict"] = verdict.to_dict()
     facts["dependency_relations"] = relations
     facts["knowledge_graph"] = graph_facts
     notes.append(_graph_note(stage))
@@ -492,10 +496,7 @@ def impact_section(finding: Finding) -> ReportSection:
     }
     notes = _ai_status_notes(finding, "impact assessment", impact is not None)
     if not facts["files_referencing_dependency"]:
-        notes.append(
-            "No direct import of the package was found; use through other packages, dynamic imports and "
-            "notebooks are not analysed, so this is not evidence that the package is unused"
-        )
+        notes.append(usage_verdict(finding.usage_evidence, finding.dependency.direct_or_transitive).message)
     reasoning = None
     if impact is not None:
         if impact.get("impact_level") == ImpactLevel.NONE and finding.impact_level != ImpactLevel.NONE:
@@ -716,6 +717,9 @@ def _usage_facts(evidence: UsageEvidence) -> dict[str, Any]:
         "references": [r.to_dict() for r in evidence.references],
         "affected_components": list(evidence.components),
         "truncated": evidence.truncated,
+        "skipped_files": list(evidence.skipped_files),
+        "skipped_files_total": evidence.skipped_files_total,
+        "analysis_depth": evidence.analysis_depth,
     }
 
 

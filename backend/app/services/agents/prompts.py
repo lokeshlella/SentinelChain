@@ -171,8 +171,18 @@ def _vulnerability_section(ctx: FindingContext, limits: _Limits) -> str:
 def _usage_section(ctx: FindingContext, limits: _Limits) -> str:
     usage = ctx.usage
     pkg = ctx.dependency.package_name
+    skipped_line = (
+        f"- not scanned ({usage.skipped_files_total} eligible file(s) larger than 1 MB or unreadable): "
+        f"{_join_capped(usage.skipped_files, limits.files)}"
+        if usage.skipped_files_total
+        else None
+    )
     if not usage.references and not usage.files and not usage.components:
         lines = [f"- {NO_DIRECT_IMPORT_FACT.format(pkg=pkg)}", f"- limits: {USAGE_SCAN_LIMITS}"]
+        if usage.verdict:
+            lines.append(f"- what this means: {usage.verdict}")
+        if skipped_line:
+            lines.append(skipped_line)
         if usage.truncated:
             lines.append("- note: the scanner stopped early (file or size cap); the scan is incomplete")
         return _section("SOURCE USAGE EVIDENCE (FACTS)", lines)
@@ -186,6 +196,8 @@ def _usage_section(ctx: FindingContext, limits: _Limits) -> str:
         lines.append(f"- references ({len(usage.references)}):")
         rendered = [f"{r.file}:{r.line}: {_clip(r.snippet, 120)}" for r in usage.references]
         lines.extend(_bullets(rendered, limits.references))
+    if skipped_line:
+        lines.append(skipped_line)
     if usage.truncated:
         lines.append("- note: the scanner stopped early; more references may exist")
     return _section("SOURCE USAGE EVIDENCE (FACTS)", lines)

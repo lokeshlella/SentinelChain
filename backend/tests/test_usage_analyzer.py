@@ -141,7 +141,9 @@ def test_python_usage_references_files_and_components(python_repo: Path):
     assert evidence.package_name == "requests"
     assert evidence.ecosystem == "PyPI"
     assert evidence.import_names == ["requests"]
-    assert evidence.truncated is False
+    # src/generated.py is larger than the cap: it may import the package, so the evidence is partial (audit V2-03)
+    assert evidence.truncated is True
+    assert evidence.skipped_files == ["src/generated.py"] and evidence.skipped_files_total == 1
 
     imports = [(r.file, r.line, r.snippet) for r in evidence.import_references]
     assert imports == [
@@ -186,7 +188,8 @@ def test_python_commented_requirement_and_missing_imports_yield_no_references(py
     assert evidence.components == []
     assert evidence.import_names == ["flask"]  # what was searched for
     assert evidence.is_used is False
-    assert evidence.truncated is False
+    assert evidence.truncated is True  # src/generated.py was not scanned: "no import" is not a complete answer
+    assert evidence.skipped_files == ["src/generated.py"]
 
 
 def test_python_prefix_sharing_package_does_not_match(python_repo: Path):
@@ -829,6 +832,9 @@ def test_evidence_serialisation_and_context():
         "truncated": True,
         "scanned_files": 2,
         "total_files": 1,
+        "skipped_files": [],
+        "skipped_files_total": 0,
+        "analysis_depth": "direct-import-scan",
     }
     assert json.loads(json.dumps(data)) == data  # JSON-serialisable for the findings table
     assert UsageEvidence.from_dict(data) == evidence

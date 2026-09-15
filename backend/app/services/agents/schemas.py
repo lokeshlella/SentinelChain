@@ -84,6 +84,13 @@ class UsageContext(BaseModel):
     files: list[str] = Field(default_factory=list)
     components: list[str] = Field(default_factory=list)
     truncated: bool = False
+    # Eligible files the scan could not read (oversized / unreadable) — audit V2-03.
+    skipped_files: list[str] = Field(default_factory=list)
+    skipped_files_total: int = 0
+    analysis_depth: str = "direct-import-scan"
+    # What "no usage" means for this dependency (``usage_verdict``) — audit V2-02.
+    verdict_kind: str | None = None
+    verdict: str | None = None
 
 
 class GraphContext(BaseModel):

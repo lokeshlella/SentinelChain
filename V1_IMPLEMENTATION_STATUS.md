@@ -82,6 +82,13 @@ tests + 20 integration tests, all passing._
   the severity-derived floor, and `pipeline._store_ai_result` never stores a risk below that
   floor (or an impact of NONE); the raw verdicts stay in `ai_results` and the difference is
   explained in the reasoning, the report (`risk_origin = provisional floor`) and the UI (audit V2-01).
+* **Usage depth is explicit** — the usage scan covers direct imports only
+  (`analysis_depth = "direct-import-scan"`). Eligible files it could not read (larger than 1 MB
+  or unreadable) are listed as `skipped_files` and make the evidence `truncated` (audit V2-03),
+  and every finding carries a `usage_verdict` — `used`, `beyond-depth` (transitive),
+  `scan-incomplete`, `unknown-scope`, `no-direct-import` or `not-analysed` — rendered in the
+  prompts, the API, the evidence report and the finding page, so "beyond analysis depth" is never
+  shown as "not referenced" (audit V2-02).
 * **Credential redaction** — `core/redaction.py`: URL userinfo, `_authToken`/`password`-style
   assignments and well-known token shapes found in manifests are redacted from dependency
   `version_spec`, extraction warnings, the stored/served proposed change, the evidence report
