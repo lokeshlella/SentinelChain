@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.redaction import redact_secrets
 
 
 class ORMModel(BaseModel):
@@ -222,6 +224,14 @@ class RemediationDetail(RemediationSummary):
     finding: FindingSummary | None = None
     validations: list[ValidationSummary] = Field(default_factory=list)
     pull_requests: list[PullRequestSummary] = Field(default_factory=list)
+
+    @field_validator("proposed_change")
+    @classmethod
+    def _redact_proposed_change(cls, change: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Rows written before audit V2-04 may still hold manifest credentials; never serve them."""
+        if not change:
+            return change
+        return {k: (redact_secrets(v) if isinstance(v, str) else v) for k, v in change.items()}
 
 
 # ---------------------------------------------------------------- dashboard

@@ -18,6 +18,7 @@ from pathlib import Path
 from packaging.requirements import InvalidRequirement, Requirement
 
 from app.core.logging import get_stage_logger
+from app.core.redaction import redact_secrets
 from app.models.enums import DependencyScope, Ecosystem
 from app.services.dependencies.base import DependencyExtractor, ExtractedDependency, ExtractionResult
 from app.services.dependencies.common import read_text_file, relative_posix, truncate_text, walk_files
@@ -175,7 +176,7 @@ class PythonDependencyExtractor(DependencyExtractor):
                 "(local/VCS installs have no registry version)"
             )
         else:
-            log.debug("%s:%d: ignoring pip option %r", relative, line.number, line.text)
+            log.debug("%s:%d: ignoring pip option %r", relative, line.number, redact_secrets(line.text))
 
     def _parse_requirement_line(
         self, line: _LogicalLine, relative: str, dev: bool, result: ExtractionResult

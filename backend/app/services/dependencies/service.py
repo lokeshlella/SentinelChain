@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import RepositoryError, UnsupportedProjectError
 from app.core.logging import get_stage_logger
+from app.core.redaction import redact_secrets
 from app.core.versions import normalize_package_name
 from app.models.analysis import Analysis
 from app.models.dependency import Dependency, DependencyRelation
@@ -107,6 +108,11 @@ class DependencyService:
             "%d dependencies extracted (%s), %d relations, %d files, %d warnings",
             len(result.dependencies), breakdown, len(result.relations), len(result.files), len(result.warnings),
         )
+        # Manifest text may carry credentials (index URLs, VCS requirements): redact before
+        # anything is logged or stored (audit V2-04). Extractors quote the offending lines.
+        result.warnings = [redact_secrets(w) or "" for w in result.warnings]
+        for dep in result.dependencies:
+            dep.version_spec = redact_secrets(dep.version_spec)
         for warning in result.warnings:
             log.warning(warning)
         return result

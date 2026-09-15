@@ -11,6 +11,7 @@ from app.models.enums import RiskLevel, Severity
 from app.services.analysis.risk import (
     aggregate_overall_risk,
     effective_risk_level,
+    floor_risk_level,
     normalise_risk_level,
     normalise_severity,
     provisional_risk_from_severity,
@@ -189,34 +190,38 @@ def test_aggregate_prefers_ai_risk_over_provisional(builder: RepoBuilder):
     assert aggregate_overall_risk(builder.stored_findings()) is RiskLevel.CRITICAL
 
 
-def test_aggregate_ai_risk_can_lower_a_finding(builder: RepoBuilder):
-    # AI lowered the level: CRITICAL severity, but usage evidence made the agent say LOW.
+def test_aggregate_never_drops_below_the_severity_derived_level(builder: RepoBuilder):
+    # Audit V2-01: a stored LOW on a CRITICAL advisory (a row written before the floor existed,
+    # or a model that ignored the floor) must not lower the analysis' overall risk.
     builder.finding("CRITICAL", risk_level="LOW")
 
-    assert aggregate_overall_risk(builder.stored_findings()) is RiskLevel.LOW
+    assert aggregate_overall_risk(builder.stored_findings()) is RiskLevel.CRITICAL
 
 
 def test_aggregate_unknown_beats_none(builder: RepoBuilder):
-    builder.finding("HIGH", risk_level="NONE")
+    builder.finding("UNKNOWN", risk_level="NONE")  # unrated advisory, model said NONE
     builder.finding("UNKNOWN")
 
     assert aggregate_overall_risk(builder.stored_findings()) is RiskLevel.UNKNOWN
 
 
-def test_aggregate_all_none_stays_none(builder: RepoBuilder):
+def test_stored_none_never_makes_a_vulnerable_finding_risk_free(builder: RepoBuilder):
+    # Audit V2-01: a stored NONE is floored — to the severity level when there is one, to UNKNOWN otherwise.
     builder.finding("HIGH", risk_level="NONE")
-    builder.finding("LOW", risk_level="none")
-
-    assert aggregate_overall_risk(builder.stored_findings()) is RiskLevel.NONE
-
-
-def test_aggregate_accepts_lowercase_and_garbage_stored_levels(builder: RepoBuilder):
-    builder.finding("LOW", risk_level="high")
-    builder.finding("CRITICAL", risk_level="not-a-level")  # unrecognised AI value -> UNKNOWN, not CRITICAL
+    builder.finding("UNKNOWN", risk_level="none")
 
     findings = builder.stored_findings()
     assert {effective_risk_level(f) for f in findings} == {RiskLevel.HIGH, RiskLevel.UNKNOWN}
     assert aggregate_overall_risk(findings) is RiskLevel.HIGH
+
+
+def test_aggregate_accepts_lowercase_and_garbage_stored_levels(builder: RepoBuilder):
+    builder.finding("LOW", risk_level="high")
+    builder.finding("CRITICAL", risk_level="not-a-level")  # unrecognised stored value cannot lower a CRITICAL advisory
+
+    findings = builder.stored_findings()
+    assert {effective_risk_level(f) for f in findings} == {RiskLevel.HIGH, RiskLevel.CRITICAL}
+    assert aggregate_overall_risk(findings) is RiskLevel.CRITICAL
 
 
 def test_aggregate_accepts_generator(builder: RepoBuilder):
@@ -231,9 +236,31 @@ def test_effective_risk_level_per_finding(builder: RepoBuilder):
     ai = builder.finding("HIGH", risk_level="MEDIUM")
     unknown = builder.finding(None)
 
+    raised = builder.finding("LOW", risk_level="HIGH")
+
     assert effective_risk_level(provisional) is RiskLevel.HIGH
-    assert effective_risk_level(ai) is RiskLevel.MEDIUM
+    assert effective_risk_level(ai) is RiskLevel.HIGH  # floored: the AI may not lower a HIGH advisory
+    assert effective_risk_level(raised) is RiskLevel.HIGH  # the AI may raise it
     assert effective_risk_level(unknown) is RiskLevel.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("judged", "provisional", "expected"),
+    [
+        ("LOW", "HIGH", RiskLevel.HIGH),  # never lowered
+        ("NONE", "MEDIUM", RiskLevel.MEDIUM),  # "no risk" cannot be proven
+        ("MEDIUM", "MEDIUM", RiskLevel.MEDIUM),
+        ("CRITICAL", "MEDIUM", RiskLevel.CRITICAL),  # raising is allowed
+        ("UNKNOWN", "HIGH", RiskLevel.HIGH),  # an unrated judgement keeps the provisional level
+        ("HIGH", "UNKNOWN", RiskLevel.HIGH),  # no severity: the judgement stands
+        ("LOW", "UNKNOWN", RiskLevel.LOW),
+        ("NONE", "UNKNOWN", RiskLevel.UNKNOWN),  # NONE ranks below UNKNOWN: still never "no risk"
+        (None, "HIGH", RiskLevel.HIGH),
+        ("garbage", "MEDIUM", RiskLevel.MEDIUM),
+    ],
+)
+def test_floor_risk_level(judged, provisional, expected):
+    assert floor_risk_level(judged, provisional) is expected
 
 
 # --------------------------------------------------------------------------- priority ordering

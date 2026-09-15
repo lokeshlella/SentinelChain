@@ -233,14 +233,14 @@ export default function Finding() {
             { label: 'Files referencing', value: asList(usage.files).length },
             { label: 'Files scanned', value: usage.scanned_files },
             { label: 'Truncated', value: usage.truncated === undefined ? null : (usage.truncated ? 'yes' : 'no') },
-            { label: 'Affected components', value: asList(finding.affected_components).length ? asList(finding.affected_components).map((c) => <code key={c} className="chip">{c}</code>) : <span className="muted">none (not referenced by application code)</span> },
+            { label: 'Affected components', value: asList(finding.affected_components).length ? asList(finding.affected_components).map((c) => <code key={c} className="chip">{c}</code>) : <span className="muted">none (no direct import found; transitive and dynamic use are not analysed)</span> },
           ]}
         />
         <Table
           compact
           rows={references}
           rowKey={(r, i) => `${r.file}-${r.line}-${i}`}
-          empty="No source references found for this package."
+          empty="No direct import of this package was found. Use through other packages, dynamic imports and notebooks are not analysed, so this is not evidence that the package is unused."
           columns={[
             { key: 'file', label: 'File', render: (r) => <span className="mono small">{r.file}</span> },
             { key: 'line', label: 'Line' },
@@ -286,6 +286,11 @@ export default function Finding() {
             ) : <p className="muted">Not available.</p>}
 
             <h3>Impact {impact?.impact_level && <StatusBadge value={impact.impact_level} />}</h3>
+            {impact?.impact_level && finding.impact_level && impact.impact_level !== finding.impact_level && (
+              <p className="muted small">
+                Stored impact is <strong>{finding.impact_level}</strong>: the AI judged {impact.impact_level}, but Sentinel Chain cannot establish that a vulnerable package has no impact (the usage scan finds direct imports only).
+              </p>
+            )}
             {impact ? (
               <>
                 <div className="grid-2">
@@ -311,6 +316,11 @@ export default function Finding() {
             ) : <p className="muted">Not available.</p>}
 
             <h3>Risk {risk?.risk_level && <StatusBadge value={risk.risk_level} />}</h3>
+            {risk?.risk_level && finding.risk_level && risk.risk_level !== finding.risk_level && (
+              <p className="muted small">
+                Stored risk is <strong>{finding.risk_level}</strong> (severity-derived floor): the AI judged {risk.risk_level}. Sentinel Chain never lowers the risk below the severity-derived level because it cannot prove that the vulnerable code is unreachable.
+              </p>
+            )}
             {risk ? (
               <>
                 <div className="label">Factors</div>
