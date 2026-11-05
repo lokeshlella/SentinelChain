@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from app.core.config import Settings
+from app.db.base import utcnow
 from app.models import Analysis, Finding
 from app.models.enums import AIStatus, AnalysisStatus, StageStatus, VulnerabilityStatus
 from app.services.agents.orchestrator import AIOrchestrator
 from app.services.analysis.pipeline import AnalysisPipeline
 from app.services.analysis.usage import SourceUsageAnalyzer
 from app.services.dependencies.service import DependencyService
+from app.services.jobs import expire_if_stale, heartbeat_timeout
 from app.services.llm.base import LLMError
 from app.services.repository.service import RepositoryService
 from app.services.vulnerabilities.service import VulnerabilityService
@@ -185,3 +188,31 @@ def test_invented_component_is_dropped_by_guardrail(db, settings, repository):
     finding: Finding = analysis.findings[0]
     assert finding.ai_results["impact"]["affected_components"] == ["src"]
     assert finding.ai_results["dropped_components"] == ["billing/core"]
+
+
+def test_watchdog_error_is_cleared_when_the_run_completes_anyway(db, settings, repository):
+    """A live run hit this: the heartbeat watchdog marked the analysis FAILED because the host had
+    gone to sleep, the job was in fact healthy and finished normally — and the stale message stayed
+    on the row, so the analysis page printed "Pipeline error: Background job stopped reporting
+    progress ..." on a successful analysis. A completed run must own its own error state."""
+    analysis = new_analysis(db, repository)
+    pipeline = make_pipeline(db, settings, llm=FakeLLMProvider(ai_outputs(1)))
+    run_ai_stage = pipeline._stage_ai
+
+    def expire_then_run_ai(*args, **kwargs):
+        # The watchdog fires mid-run, as a sleeping host makes it: the heartbeat goes stale while
+        # the job is alive and still working through its stages.
+        analysis.heartbeat_at = utcnow() - timedelta(seconds=heartbeat_timeout(settings) + 60)
+        db.commit()
+        assert expire_if_stale(db, analysis, settings) is True
+        assert analysis.status == AnalysisStatus.FAILED
+        assert "stopped reporting progress" in analysis.error_message
+        return run_ai_stage(*args, **kwargs)
+
+    pipeline._stage_ai = expire_then_run_ai
+    pipeline.run(analysis.analysis_id)
+
+    db.refresh(analysis)
+    assert analysis.status == AnalysisStatus.COMPLETED
+    assert analysis.error_message is None
+    assert analysis.stages["ai"] == StageStatus.OK
