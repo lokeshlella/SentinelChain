@@ -81,3 +81,31 @@ export function isActive(status) {
   const s = String(status || '').toUpperCase()
   return s === 'PENDING' || s === 'RUNNING' || s === 'VALIDATING'
 }
+
+// AI counters out of `analysis.summary.ai`. Audit F-19 renamed them (one `analyzed` count became
+// attempted / completed / failed / unavailable / skipped_by_limit), so rows written before that
+// rename only carry `analyzed` and `skipped` — fall back to those instead of rendering nothing.
+export function aiSummary(ai) {
+  const src = ai && typeof ai === 'object' ? ai : {}
+  const count = (...keys) => {
+    for (const key of keys) {
+      const n = Number(src[key])
+      if (src[key] !== null && src[key] !== undefined && src[key] !== '' && !Number.isNaN(n)) return n
+    }
+    return undefined
+  }
+  const out = {
+    attempted: count('attempted', 'analyzed'),
+    completed: count('completed'),
+    failed: count('failed'),
+    unavailable: count('unavailable'),
+    skipped: count('skipped_by_limit', 'skipped'),
+    limit: count('limit'),
+    model: src.model || null,
+    note: src.note || null,
+  }
+  // Pre-F-19 rows carry no `completed`; the single `analyzed` count was the findings analysed.
+  if (out.completed === undefined && out.attempted !== undefined) out.completed = out.attempted
+  out.hasCounters = ['attempted', 'completed', 'failed', 'unavailable', 'skipped'].some((k) => out[k] !== undefined)
+  return out
+}

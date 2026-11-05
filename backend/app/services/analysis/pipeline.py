@@ -244,7 +244,7 @@ class AnalysisPipeline:
     def _stage_ai(self, analysis: Analysis, repository: Repository, findings: list[Finding], run_ai: bool) -> None:
         self._set_stage(analysis, "ai", StageStatus.RUNNING)
         if not findings:
-            self._merge_summary(analysis, {"ai": {"analyzed": 0, "note": "no findings"}})
+            self._merge_summary(analysis, {"ai": {"attempted": 0, "completed": 0, "failed": 0, "unavailable": 0, "skipped_by_limit": 0, "note": "no findings"}})
             self._set_stage(analysis, "ai", StageStatus.SKIPPED)
             return
         if not run_ai or self.orchestrator is None:
@@ -252,7 +252,7 @@ class AnalysisPipeline:
             for finding in findings:
                 finding.ai_status = AIStatus.SKIPPED if not run_ai else AIStatus.UNAVAILABLE
                 finding.ai_error = reason
-            self._merge_summary(analysis, {"ai": {"analyzed": 0, "note": reason}})
+            self._merge_summary(analysis, {"ai": {"attempted": 0, "completed": 0, "failed": 0, "unavailable": 0, "skipped_by_limit": 0, "note": reason}})
             self._set_stage(analysis, "ai", StageStatus.SKIPPED if not run_ai else StageStatus.UNAVAILABLE)
             self._commit()
             return
@@ -324,6 +324,10 @@ class AnalysisPipeline:
         analysis.overall_risk = aggregate_overall_risk(findings)
         analysis.status = AnalysisStatus.COMPLETED
         analysis.completed_at = utcnow()
+        # The run succeeded, so any error recorded while it was in flight is stale: the heartbeat
+        # watchdog marks a job FAILED when it stops reporting (e.g. the host slept) and the job can
+        # still finish afterwards. Leaving the message behind prints it on a COMPLETED analysis.
+        analysis.error_message = None
         self._merge_summary(analysis, {"findings": len(findings), "overall_risk": analysis.overall_risk})
         self._commit()
 

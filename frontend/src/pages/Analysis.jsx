@@ -10,7 +10,7 @@ import ErrorBox from '../components/ErrorBox.jsx'
 import KeyValue from '../components/KeyValue.jsx'
 import JsonBlock from '../components/JsonBlock.jsx'
 import StageTracker from '../components/StageTracker.jsx'
-import { fmtDate, fmtDuration, isActive, pkgLabel, sortByRisk } from '../utils/format.js'
+import { aiSummary, fmtDate, fmtDuration, isActive, pkgLabel, sortByRisk } from '../utils/format.js'
 
 function Counter({ label, value, tone }) {
   return (
@@ -53,7 +53,7 @@ export default function Analysis() {
   const vulns = summary.vulnerabilities || {}
   const usage = summary.usage || {}
   const graph = summary.knowledge_graph || {}
-  const ai = summary.ai || {}
+  const ai = aiSummary(summary.ai)
   const warnings = [
     ...(Array.isArray(summary.warnings) ? summary.warnings : []),
     ...(Array.isArray(deps.warnings) ? deps.warnings : []),
@@ -97,7 +97,7 @@ export default function Analysis() {
           <Counter label="Deps with source usage" value={usage.with_source_references} />
           <Counter label="Graph nodes" value={graph.nodes_written} />
           <Counter label="Graph relationships" value={graph.relationships_written} />
-          <Counter label="AI analysed" value={ai.analyzed} />
+          <Counter label="AI analysed" value={ai.completed} />
         </div>
         <KeyValue
           columns={3}
@@ -112,8 +112,9 @@ export default function Analysis() {
             { label: 'OSV provider', value: vulns.provider_available === undefined ? null : <StatusBadge value={vulns.provider_available ? 'OK' : 'UNAVAILABLE'} /> },
             { label: 'Knowledge graph', value: graph.available === undefined ? null : <StatusBadge value={graph.available ? 'OK' : 'UNAVAILABLE'} /> },
             { label: 'AI model', value: ai.model },
-            { label: 'AI completed / failed / skipped', value: ai.analyzed !== undefined ? `${ai.completed ?? 0} / ${ai.failed ?? 0} / ${ai.skipped ?? 0}${ai.limit ? ` (limit ${ai.limit})` : ''}` : null },
-            { label: 'AI unavailable', value: ai.unavailable },
+            { label: 'AI attempted / completed / failed', value: ai.hasCounters ? `${ai.attempted ?? 0} / ${ai.completed ?? 0} / ${ai.failed ?? 0}` : null },
+            { label: 'AI unavailable / skipped by limit', value: ai.hasCounters ? `${ai.unavailable ?? 0} / ${ai.skipped ?? 0}${ai.limit ? ` (limit ${ai.limit})` : ''}` : null },
+            ai.note ? { label: 'AI note', value: ai.note } : null,
           ]}
         />
         {graph.error && <div className="alert info">Knowledge graph: {graph.error}</div>}
