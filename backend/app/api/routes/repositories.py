@@ -13,6 +13,7 @@ from app.api.serializers import (
     snapshot_analysis,
 )
 from app.core.exceptions import ConflictError, NotFoundError
+from app.core.features import feature_enabled
 from app.core.logging import get_stage_logger
 from app.models import Analysis, Dependency, Finding
 from app.models.enums import AnalysisStatus, RepositoryStatus
@@ -193,7 +194,10 @@ def analyze_repository(
         session_maker=session_maker,
         pipeline_factory=pipeline_factory,
     )
-    log.info("Analysis %d queued for repository %d (run_ai=%s)", analysis.analysis_id, repository_id, payload.run_ai)
+    if feature_enabled("ai"):
+        log.info("Analysis %d queued for repository %d (run_ai=%s)", analysis.analysis_id, repository_id, payload.run_ai)
+    else:
+        log.info("Analysis %d queued for repository %d", analysis.analysis_id, repository_id)
     out = AnalysisDetail.model_validate(analysis)
     out.repository = repository_summary(db, repository)
     return out

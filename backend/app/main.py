@@ -12,9 +12,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app import __version__
+from app.api.openapi import filter_openapi
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import SentinelError
+from app.core.features import describe as describe_features
+from app.core.features import enabled_features
 from app.core.logging import configure_logging
 
 settings = get_settings()
@@ -40,7 +43,10 @@ def mark_interrupted_jobs() -> None:
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s (%s)", settings.app_name, __version__, settings.app_env)
     logger.info("Workspace: %s", settings.workspace_path)
-    logger.info("Ollama: %s (model=%s)", settings.ollama_base_url, settings.ollama_model)
+    features = enabled_features(settings)
+    if features["ai"] or features["remediation"]:
+        logger.info("Ollama: %s (model=%s)", settings.ollama_base_url, settings.ollama_model)
+    logger.info("Build: %s", describe_features(settings))
     if settings.app_env != "test":
         mark_interrupted_jobs()
     yield
@@ -125,6 +131,14 @@ async def unhandled_error_handler(_: Request, exc: Exception) -> JSONResponse:
 
 
 app.include_router(api_router, prefix=settings.api_prefix)
+
+
+def openapi_for_build() -> dict:
+    """``/docs`` and ``/redoc`` list only what this build exposes (a Phase-1 build leaves out Phase 2)."""
+    return filter_openapi(FastAPI.openapi(app), enabled_features(get_settings()))
+
+
+app.openapi = openapi_for_build
 
 
 @app.get("/", include_in_schema=False)

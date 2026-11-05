@@ -1,4 +1,5 @@
 import StatusBadge from './StatusBadge.jsx'
+import { useFeatures } from '../features.jsx'
 
 const ORDER = ['repository', 'dependencies', 'vulnerabilities', 'usage', 'knowledge_graph', 'ai']
 const LABELS = {
@@ -11,9 +12,12 @@ const LABELS = {
 }
 
 // Renders analysis.stages ({name: status}) as a horizontal list of stage → badge.
+// A build without the AI feature does not draw an "ai" stage stored by one that had it.
 export default function StageTracker({ stages }) {
+  const { features } = useFeatures()
   const map = stages && typeof stages === 'object' ? stages : {}
   const keys = [...ORDER.filter((k) => k in map), ...Object.keys(map).filter((k) => !ORDER.includes(k))]
+    .filter((k) => k !== 'ai' || features.ai)
   if (keys.length === 0) return <p className="muted">No stage information yet.</p>
   return (
     <ol className="stages">

@@ -9,6 +9,7 @@ def test_health_reports_each_service():
     with (
         patch("app.api.routes.health.check_database", return_value=(True, "pg")),
         patch("app.api.routes.health.check_neo4j", return_value=(False, "down")),
+        patch("app.api.routes.health._check_osv", return_value=(False, "down")),
         patch("app.api.routes.health._check_ollama", return_value=(False, "down")),
         patch("app.api.routes.health._check_docker", return_value=(False, "down")),
         patch("app.api.routes.health._check_github", return_value=(False, "no token")),
@@ -18,13 +19,14 @@ def test_health_reports_each_service():
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"  # PostgreSQL is the only mandatory service
-    assert {s["name"] for s in body["services"]} == {"postgresql", "neo4j", "ollama", "docker", "github"}
+    assert [s["name"] for s in body["services"]] == ["postgresql", "neo4j", "osv", "ollama", "docker", "github"]
 
 
 def test_health_degraded_without_database():
     with (
         patch("app.api.routes.health.check_database", return_value=(False, "refused")),
         patch("app.api.routes.health.check_neo4j", return_value=(True, "ok")),
+        patch("app.api.routes.health._check_osv", return_value=(True, "ok")),
         patch("app.api.routes.health._check_ollama", return_value=(True, "ok")),
         patch("app.api.routes.health._check_docker", return_value=(True, "ok")),
         patch("app.api.routes.health._check_github", return_value=(True, "ok")),

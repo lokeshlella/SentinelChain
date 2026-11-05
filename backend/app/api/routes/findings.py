@@ -58,7 +58,7 @@ def get_finding(finding_id: int, db: Session = deps.DbDep):
     return finding_detail(db, finding)
 
 
-@router.post("/{finding_id}/analyze", response_model=FindingDetail, status_code=status.HTTP_202_ACCEPTED, summary="Run the AI agents for one finding (background; poll ai_status)")
+@router.post("/{finding_id}/analyze", response_model=FindingDetail, status_code=status.HTTP_202_ACCEPTED, summary="Run the AI agents for one finding (background; poll ai_status)", **deps.feature_gate("ai"))
 def analyze_finding(
     finding_id: int,
     background: BackgroundTasks,

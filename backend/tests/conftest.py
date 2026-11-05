@@ -22,6 +22,10 @@ os.environ.setdefault("APP_ENV", "test")
 # test forgets to override Settings: point the default workspace at a throw-away directory
 # before app.core.config is imported anywhere.
 os.environ["REPOSITORY_WORKSPACE"] = tempfile.mkdtemp(prefix="sentinel-tests-")
+# The suite tests the complete product unless a test asks for a Phase-1 build itself: a shell or
+# .env that sets SENTINEL_PHASE=1 for a demo must not change what the other tests see.
+os.environ["SENTINEL_PHASE"] = "2"
+os.environ["SENTINEL_FEATURES"] = ""
 
 
 def pytest_collection_modifyitems(config, items):
@@ -31,6 +35,13 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def _no_osv_probe(request, monkeypatch):
+    """/api/health probes OSV.dev; unit tests must not depend on (or wait for) the internet."""
+    if "integration" not in request.keywords:
+        monkeypatch.setattr("app.api.routes.health._check_osv", lambda: (True, "not probed in unit tests"))
 
 
 @pytest.fixture

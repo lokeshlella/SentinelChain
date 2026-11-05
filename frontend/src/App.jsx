@@ -9,6 +9,8 @@ import Validation from './pages/Validation.jsx'
 import PullRequest from './pages/PullRequest.jsx'
 import PullRequests from './pages/PullRequests.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import Loading from './components/Loading.jsx'
+import { useFeatures } from './features.jsx'
 
 function NotFound() {
   return (
@@ -19,17 +21,25 @@ function NotFound() {
   )
 }
 
+// A page of a feature this build does not expose is "not found"; until the build is known, wait.
+function Gate({ feature, children }) {
+  const { loaded, features } = useFeatures()
+  if (!loaded) return <Loading text="Loading…" />
+  return features[feature] ? children : <NotFound />
+}
+
 export default function App() {
+  const { phase, features } = useFeatures()
   return (
     <div className="layout">
       <header className="topbar">
         <div className="brand">
           <Link to="/" className="brand-link"><span className="brand-mark">◆</span> Sentinel Chain</Link>
-          <span className="brand-sub">Agentic AI for Secure Software Supply Chains · V1</span>
+          <span className="brand-sub">Agentic AI for Secure Software Supply Chains{phase === 1 ? ' · Phase 1' : phase === 2 ? ' · V1' : ''}</span>
         </div>
         <nav>
           <NavLink to="/" end>Dashboard</NavLink>
-          <NavLink to="/pull-requests">Pull requests</NavLink>
+          {features.pull_requests && <NavLink to="/pull-requests">Pull requests</NavLink>}
           <NavLink to="/health">System health</NavLink>
         </nav>
       </header>
@@ -41,15 +51,19 @@ export default function App() {
             <Route path="/repositories/:id" element={<Repository />} />
             <Route path="/analyses/:id" element={<Analysis />} />
             <Route path="/findings/:id" element={<Finding />} />
-            <Route path="/remediations/:id" element={<Remediation />} />
-            <Route path="/validations/:id" element={<Validation />} />
-            <Route path="/pull-requests" element={<PullRequests />} />
-            <Route path="/pull-requests/:id" element={<PullRequest />} />
+            <Route path="/remediations/:id" element={<Gate feature="remediation"><Remediation /></Gate>} />
+            <Route path="/validations/:id" element={<Gate feature="validation"><Validation /></Gate>} />
+            <Route path="/pull-requests" element={<Gate feature="pull_requests"><PullRequests /></Gate>} />
+            <Route path="/pull-requests/:id" element={<Gate feature="pull_requests"><PullRequest /></Gate>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ErrorBoundary>
       </main>
-      <footer className="footer muted">Sentinel Chain V1 — findings are facts from OSV and source scans; AI sections are model inferences and are labelled as such.</footer>
+      <footer className="footer muted">
+        {features.ai
+          ? 'Sentinel Chain V1 — findings are facts from OSV and source scans; AI sections are model inferences and are labelled as such.'
+          : 'Sentinel Chain — findings are facts from OSV.dev and deterministic source scans.'}
+      </footer>
     </div>
   )
 }

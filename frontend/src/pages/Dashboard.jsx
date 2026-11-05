@@ -6,6 +6,7 @@ import Table from '../components/Table.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import Loading from '../components/Loading.jsx'
 import ErrorBox from '../components/ErrorBox.jsx'
+import { useFeatures } from '../features.jsx'
 import { fmtDate, pkgLabel } from '../utils/format.js'
 
 const RISK_LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NONE', 'UNKNOWN']
@@ -76,6 +77,7 @@ function AddRepositoryForm({ onCreated }) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { features } = useFeatures()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -116,9 +118,9 @@ export default function Dashboard() {
             <Tile label="Dependencies" value={data.dependencies} />
             <Tile label="Vulnerable dependencies" value={data.vulnerable_dependencies} tone={data.vulnerable_dependencies ? 'danger' : 'ok'} />
             <Tile label="Findings" value={data.findings} />
-            <Tile label="Remediations" value={data.remediations} />
-            <Tile label="Validations" value={data.validations} />
-            <Tile label="Pull requests" value={data.pull_requests} to="/pull-requests" />
+            {features.remediation && <Tile label="Remediations" value={data.remediations} />}
+            {features.validation && <Tile label="Validations" value={data.validations} />}
+            {features.pull_requests && <Tile label="Pull requests" value={data.pull_requests} to="/pull-requests" />}
           </div>
 
           <Section title="Findings by risk level">
@@ -197,10 +199,10 @@ export default function Dashboard() {
                 { key: 'vuln', label: 'Vulnerability', render: (f) => f.vulnerability?.identifier },
                 { key: 'severity', label: 'Severity', render: (f) => <StatusBadge value={f.vulnerability?.severity} /> },
                 { key: 'risk_level', label: 'Risk', render: (f) => <StatusBadge value={f.risk_level} /> },
-                { key: 'impact_level', label: 'Impact', render: (f) => f.impact_level ? <StatusBadge value={f.impact_level} /> : null },
-                { key: 'ai_status', label: 'AI', render: (f) => <StatusBadge value={f.ai_status} /> },
+                features.ai && { key: 'impact_level', label: 'Impact', render: (f) => f.impact_level ? <StatusBadge value={f.impact_level} /> : null },
+                features.ai && { key: 'ai_status', label: 'AI', render: (f) => <StatusBadge value={f.ai_status} /> },
                 { key: 'analysis_id', label: 'Analysis', render: (f) => <Link to={`/analyses/${f.analysis_id}`}>#{f.analysis_id}</Link> },
-              ]}
+              ].filter(Boolean)}
             />
           </Section>
         </>

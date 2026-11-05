@@ -8,6 +8,7 @@ import Loading from '../components/Loading.jsx'
 import ErrorBox from '../components/ErrorBox.jsx'
 import KeyValue from '../components/KeyValue.jsx'
 import JsonBlock from '../components/JsonBlock.jsx'
+import { useFeatures } from '../features.jsx'
 import { asList, fixedVersions, fmtDate, fmtPercent, isActive, pkgLabel } from '../utils/format.js'
 
 function FactList({ items, empty = 'None recorded.' }) {
@@ -87,6 +88,7 @@ function ReportView({ findingId }) {
 export default function Finding() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { features } = useFeatures()
   const [finding, setFinding] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -165,9 +167,9 @@ export default function Finding() {
       </div>
       <div className="badges">
         <span>Risk <StatusBadge value={finding.risk_level} fallback="UNKNOWN" /></span>
-        <span>Impact <StatusBadge value={finding.impact_level} fallback="UNKNOWN" /></span>
+        {features.ai && <span>Impact <StatusBadge value={finding.impact_level} fallback="UNKNOWN" /></span>}
         <span>Severity <StatusBadge value={vuln.severity} fallback="UNKNOWN" /></span>
-        <span>AI <StatusBadge value={finding.ai_status} /></span>
+        {features.ai && <span>AI <StatusBadge value={finding.ai_status} /></span>}
         <span className="muted">detected {fmtDate(finding.detected_at)}</span>
       </div>
       {error && <ErrorBox error={error} />}
@@ -262,138 +264,142 @@ export default function Finding() {
         <JsonBlock title="Raw usage evidence JSON" data={usage} />
       </Section>
 
-      <Section
-        title="AI reasoning (inference)"
-        subtitle="Produced by the dependency, impact and risk agents (Ollama). Everything here is model output — check it against the observed facts above."
-        actions={
-          <button type="button" className="btn primary" disabled={aiBusy || aiRunning} onClick={runAi}>
-            {aiBusy || aiRunning ? <><span className="spinner light" /> Running agents…</> : (ai ? 'Re-run AI analysis' : 'Run AI analysis')}
-          </button>
-        }
-      >
-        {aiError && <ErrorBox error={aiError} title="AI analysis failed" />}
-        {aiBusy && <p className="muted">The three agents run synchronously; this can take a minute on a local model.</p>}
-        <KeyValue
-          columns={4}
-          items={[
-            { label: 'AI status', value: <StatusBadge value={finding.ai_status} /> },
-            { label: 'Model', value: ai?.model },
-            { label: 'Result status', value: ai?.status ? <StatusBadge value={ai.status} /> : null },
-            { label: 'Error', value: finding.ai_error ? <span className="danger-text">{finding.ai_error}</span> : null },
-          ]}
-        />
-        {aiRunning && <Loading text="AI agents are running…" />}
-        {!ai && !aiRunning && <p className="muted">No AI results yet{finding.ai_error ? '' : ' — click "Run AI analysis"'}.</p>}
-        {ai && (
-          <>
-            <h3>Dependency analysis</h3>
-            {depAnalysis ? (
-              <>
-                <p>{depAnalysis.summary || <span className="muted">no summary</span>}</p>
-                <div className="label">Usage evidence cited by the agent</div>
-                <FactList items={depAnalysis.usage_evidence} />
-                <div className="muted small">Confidence: {fmtPercent(depAnalysis.confidence) ?? '—'}</div>
-              </>
-            ) : <p className="muted">Not available.</p>}
+      {features.ai && (
+        <Section
+          title="AI reasoning (inference)"
+          subtitle="Produced by the dependency, impact and risk agents (Ollama). Everything here is model output — check it against the observed facts above."
+          actions={
+            <button type="button" className="btn primary" disabled={aiBusy || aiRunning} onClick={runAi}>
+              {aiBusy || aiRunning ? <><span className="spinner light" /> Running agents…</> : (ai ? 'Re-run AI analysis' : 'Run AI analysis')}
+            </button>
+          }
+        >
+          {aiError && <ErrorBox error={aiError} title="AI analysis failed" />}
+          {aiBusy && <p className="muted">The three agents run synchronously; this can take a minute on a local model.</p>}
+          <KeyValue
+            columns={4}
+            items={[
+              { label: 'AI status', value: <StatusBadge value={finding.ai_status} /> },
+              { label: 'Model', value: ai?.model },
+              { label: 'Result status', value: ai?.status ? <StatusBadge value={ai.status} /> : null },
+              { label: 'Error', value: finding.ai_error ? <span className="danger-text">{finding.ai_error}</span> : null },
+            ]}
+          />
+          {aiRunning && <Loading text="AI agents are running…" />}
+          {!ai && !aiRunning && <p className="muted">No AI results yet{finding.ai_error ? '' : ' — click "Run AI analysis"'}.</p>}
+          {ai && (
+            <>
+              <h3>Dependency analysis</h3>
+              {depAnalysis ? (
+                <>
+                  <p>{depAnalysis.summary || <span className="muted">no summary</span>}</p>
+                  <div className="label">Usage evidence cited by the agent</div>
+                  <FactList items={depAnalysis.usage_evidence} />
+                  <div className="muted small">Confidence: {fmtPercent(depAnalysis.confidence) ?? '—'}</div>
+                </>
+              ) : <p className="muted">Not available.</p>}
 
-            <h3>Impact {impact?.impact_level && <StatusBadge value={impact.impact_level} />}</h3>
-            {impact?.impact_level && finding.impact_level && impact.impact_level !== finding.impact_level && (
-              <p className="muted small">
-                Stored impact is <strong>{finding.impact_level}</strong>: the AI judged {impact.impact_level}, but Sentinel Chain cannot establish that a vulnerable package has no impact (the usage scan finds direct imports only).
-              </p>
-            )}
-            {impact ? (
-              <>
-                <div className="grid-2">
-                  <div>
-                    <div className="label">Facts</div>
-                    <FactList items={impact.facts} />
+              <h3>Impact {impact?.impact_level && <StatusBadge value={impact.impact_level} />}</h3>
+              {impact?.impact_level && finding.impact_level && impact.impact_level !== finding.impact_level && (
+                <p className="muted small">
+                  Stored impact is <strong>{finding.impact_level}</strong>: the AI judged {impact.impact_level}, but Sentinel Chain cannot establish that a vulnerable package has no impact (the usage scan finds direct imports only).
+                </p>
+              )}
+              {impact ? (
+                <>
+                  <div className="grid-2">
+                    <div>
+                      <div className="label">Facts</div>
+                      <FactList items={impact.facts} />
+                    </div>
+                    <div>
+                      <div className="label">Inferences</div>
+                      <FactList items={impact.inferences} />
+                    </div>
                   </div>
-                  <div>
-                    <div className="label">Inferences</div>
-                    <FactList items={impact.inferences} />
-                  </div>
-                </div>
-                {impact.reasoning && <p className="prewrap">{impact.reasoning}</p>}
-                <KeyValue
-                  columns={3}
-                  items={[
-                    { label: 'Affected components', value: asList(impact.affected_components).length ? asList(impact.affected_components).map((c) => <code key={c} className="chip">{c}</code>) : null },
-                    { label: 'Dropped components', value: asList(ai.dropped_components).length ? asList(ai.dropped_components).map((c, i) => <code key={i} className="chip warn">{typeof c === 'string' ? c : JSON.stringify(c)}</code>) : <span className="muted">none (all claimed components exist)</span> },
-                    { label: 'Confidence', value: fmtPercent(impact.confidence) },
-                  ]}
-                />
-              </>
-            ) : <p className="muted">Not available.</p>}
+                  {impact.reasoning && <p className="prewrap">{impact.reasoning}</p>}
+                  <KeyValue
+                    columns={3}
+                    items={[
+                      { label: 'Affected components', value: asList(impact.affected_components).length ? asList(impact.affected_components).map((c) => <code key={c} className="chip">{c}</code>) : null },
+                      { label: 'Dropped components', value: asList(ai.dropped_components).length ? asList(ai.dropped_components).map((c, i) => <code key={i} className="chip warn">{typeof c === 'string' ? c : JSON.stringify(c)}</code>) : <span className="muted">none (all claimed components exist)</span> },
+                      { label: 'Confidence', value: fmtPercent(impact.confidence) },
+                    ]}
+                  />
+                </>
+              ) : <p className="muted">Not available.</p>}
 
-            <h3>Risk {risk?.risk_level && <StatusBadge value={risk.risk_level} />}</h3>
-            {risk?.risk_level && finding.risk_level && risk.risk_level !== finding.risk_level && (
-              <p className="muted small">
-                Stored risk is <strong>{finding.risk_level}</strong> (severity-derived floor): the AI judged {risk.risk_level}. Sentinel Chain never lowers the risk below the severity-derived level because it cannot prove that the vulnerable code is unreachable.
-              </p>
-            )}
-            {risk ? (
-              <>
-                <div className="label">Factors</div>
-                <FactList items={risk.factors} />
-                {risk.reasoning && <p className="prewrap">{risk.reasoning}</p>}
-                <div className="muted small">Confidence: {fmtPercent(risk.confidence) ?? '—'}</div>
-              </>
-            ) : <p className="muted">Not available.</p>}
+              <h3>Risk {risk?.risk_level && <StatusBadge value={risk.risk_level} />}</h3>
+              {risk?.risk_level && finding.risk_level && risk.risk_level !== finding.risk_level && (
+                <p className="muted small">
+                  Stored risk is <strong>{finding.risk_level}</strong> (severity-derived floor): the AI judged {risk.risk_level}. Sentinel Chain never lowers the risk below the severity-derived level because it cannot prove that the vulnerable code is unreachable.
+                </p>
+              )}
+              {risk ? (
+                <>
+                  <div className="label">Factors</div>
+                  <FactList items={risk.factors} />
+                  {risk.reasoning && <p className="prewrap">{risk.reasoning}</p>}
+                  <div className="muted small">Confidence: {fmtPercent(risk.confidence) ?? '—'}</div>
+                </>
+              ) : <p className="muted">Not available.</p>}
 
-            {failures.length > 0 && (
-              <>
-                <h3>Agent failures</h3>
-                <Table
-                  compact
-                  rows={failures}
-                  columns={[
-                    { key: 'agent', label: 'Agent' },
-                    { key: 'error', label: 'Error', render: (f) => <span className="danger-text small">{f.error}</span> },
-                    { key: 'raw_output', label: 'Raw output', render: (f) => f.raw_output ? <code className="snippet">{String(f.raw_output).slice(0, 300)}</code> : null },
-                  ]}
-                />
-              </>
-            )}
-          </>
-        )}
-        {finding.reasoning && (
-          <>
-            <h3>Combined reasoning</h3>
-            <p className="prewrap small">{finding.reasoning}</p>
-          </>
-        )}
-        <JsonBlock title="Raw AI results JSON" data={ai} />
-      </Section>
+              {failures.length > 0 && (
+                <>
+                  <h3>Agent failures</h3>
+                  <Table
+                    compact
+                    rows={failures}
+                    columns={[
+                      { key: 'agent', label: 'Agent' },
+                      { key: 'error', label: 'Error', render: (f) => <span className="danger-text small">{f.error}</span> },
+                      { key: 'raw_output', label: 'Raw output', render: (f) => f.raw_output ? <code className="snippet">{String(f.raw_output).slice(0, 300)}</code> : null },
+                    ]}
+                  />
+                </>
+              )}
+            </>
+          )}
+          {finding.reasoning && (
+            <>
+              <h3>Combined reasoning</h3>
+              <p className="prewrap small">{finding.reasoning}</p>
+            </>
+          )}
+          <JsonBlock title="Raw AI results JSON" data={ai} />
+        </Section>
+      )}
 
-      <Section
-        title="Remediation"
-        subtitle="The remediation agent picks a fixed version from the deterministic candidates; the change is applied to a temporary copy and validated in Docker."
-        actions={
-          <button type="button" className="btn primary" disabled={remBusy} onClick={remediate}>
-            {remBusy ? <><span className="spinner light" /> Generating…</> : 'Generate remediation'}
-          </button>
-        }
-      >
-        {remError && <ErrorBox error={remError} title="Could not generate a remediation" />}
-        <Table
-          rows={remediations}
-          rowKey={(r) => r.remediation_id}
-          empty="No remediation generated yet."
-          columns={[
-            { key: 'remediation_id', label: 'Remediation', render: (r) => <Link to={`/remediations/${r.remediation_id}`}>#{r.remediation_id}</Link> },
-            { key: 'status', label: 'Status', render: (r) => <StatusBadge value={r.status} /> },
-            { key: 'current_version', label: 'Current', render: (r) => <span className="mono">{r.current_version}</span> },
-            { key: 'recommended_version', label: 'Recommended', render: (r) => r.recommended_version ? <span className="mono">{r.recommended_version}</span> : null },
-            { key: 'alternative_package', label: 'Alternative', render: (r) => r.alternative_package ? <span className="mono">{r.alternative_package}</span> : null },
-            { key: 'confidence_score', label: 'Confidence', render: (r) => fmtPercent(r.confidence_score) },
-            { key: 'created_at', label: 'Created', render: (r) => fmtDate(r.created_at) },
-            { key: 'error_message', label: 'Error', render: (r) => r.error_message ? <span className="danger-text small">{r.error_message}</span> : null },
-          ]}
-        />
-      </Section>
+      {features.remediation && (
+        <Section
+          title="Remediation"
+          subtitle="The remediation agent picks a fixed version from the deterministic candidates; the change is applied to a temporary copy and validated in Docker."
+          actions={
+            <button type="button" className="btn primary" disabled={remBusy} onClick={remediate}>
+              {remBusy ? <><span className="spinner light" /> Generating…</> : 'Generate remediation'}
+            </button>
+          }
+        >
+          {remError && <ErrorBox error={remError} title="Could not generate a remediation" />}
+          <Table
+            rows={remediations}
+            rowKey={(r) => r.remediation_id}
+            empty="No remediation generated yet."
+            columns={[
+              { key: 'remediation_id', label: 'Remediation', render: (r) => <Link to={`/remediations/${r.remediation_id}`}>#{r.remediation_id}</Link> },
+              { key: 'status', label: 'Status', render: (r) => <StatusBadge value={r.status} /> },
+              { key: 'current_version', label: 'Current', render: (r) => <span className="mono">{r.current_version}</span> },
+              { key: 'recommended_version', label: 'Recommended', render: (r) => r.recommended_version ? <span className="mono">{r.recommended_version}</span> : null },
+              { key: 'alternative_package', label: 'Alternative', render: (r) => r.alternative_package ? <span className="mono">{r.alternative_package}</span> : null },
+              { key: 'confidence_score', label: 'Confidence', render: (r) => fmtPercent(r.confidence_score) },
+              { key: 'created_at', label: 'Created', render: (r) => fmtDate(r.created_at) },
+              { key: 'error_message', label: 'Error', render: (r) => r.error_message ? <span className="danger-text small">{r.error_message}</span> : null },
+            ]}
+          />
+        </Section>
+      )}
 
-      <ReportView findingId={id} />
+      {features.reports && <ReportView findingId={id} />}
 
       <p><Link to={`/analyses/${finding.analysis_id}`}>← Back to analysis #{finding.analysis_id}</Link></p>
     </div>
