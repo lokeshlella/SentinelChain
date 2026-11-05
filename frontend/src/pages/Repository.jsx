@@ -9,6 +9,8 @@ import ErrorBox from '../components/ErrorBox.jsx'
 import KeyValue from '../components/KeyValue.jsx'
 import JsonBlock from '../components/JsonBlock.jsx'
 import StageTracker from '../components/StageTracker.jsx'
+import { useFeatures } from '../features.jsx'
+import { pipelineDescription } from '../utils/features.js'
 import { fmtDate, fmtDuration, isActive } from '../utils/format.js'
 
 const DEP_STATUSES = ['', 'VULNERABLE', 'SAFE', 'UNKNOWN', 'UNCHECKED']
@@ -109,6 +111,7 @@ function GraphView({ repositoryId }) {
 export default function Repository() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { features } = useFeatures()
   const [repo, setRepo] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -164,7 +167,7 @@ export default function Repository() {
     setAnalyzeBusy(true)
     setAnalyzeError(null)
     try {
-      const analysis = await api.post(`/repositories/${id}/analyze`, { run_ai: runAi, refresh })
+      const analysis = await api.post(`/repositories/${id}/analyze`, { run_ai: features.ai && runAi, refresh })
       navigate(`/analyses/${analysis.analysis_id}`)
     } catch (e) {
       // 409: an analysis is already running — offer the link
@@ -245,12 +248,14 @@ export default function Repository() {
         )}
       </Section>
 
-      <Section title="Analyze" subtitle="Runs extraction → OSV → source usage → knowledge graph → AI agents in the background.">
+      <Section title="Analyze" subtitle={`Runs ${pipelineDescription(features)} in the background.`}>
         <div className="form-row align-end">
-          <label className="check">
-            <input type="checkbox" checked={runAi} onChange={(e) => setRunAi(e.target.checked)} disabled={analyzeBusy} />
-            Run AI agents (Ollama)
-          </label>
+          {features.ai && (
+            <label className="check">
+              <input type="checkbox" checked={runAi} onChange={(e) => setRunAi(e.target.checked)} disabled={analyzeBusy} />
+              Run AI agents (Ollama)
+            </label>
+          )}
           <label className="check">
             <input type="checkbox" checked={refresh} onChange={(e) => setRefresh(e.target.checked)} disabled={analyzeBusy} />
             Refresh working copy (re-clone / re-copy)

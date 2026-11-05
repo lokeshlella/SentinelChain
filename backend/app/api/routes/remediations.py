@@ -59,7 +59,7 @@ def report_response(report_service, finding_id: int, remediation_id: int | None,
 # ---------------------------------------------------------------- findings → remediation / report
 
 
-@router.post("/findings/{finding_id}/remediate", response_model=RemediationDetail, status_code=status.HTTP_202_ACCEPTED, summary="Generate a remediation (background; poll the remediation until status != PENDING)")
+@router.post("/findings/{finding_id}/remediate", response_model=RemediationDetail, status_code=status.HTTP_202_ACCEPTED, summary="Generate a remediation (background; poll the remediation until status != PENDING)", **deps.feature_gate("remediation"))
 def remediate_finding(
     finding_id: int,
     background: BackgroundTasks,
@@ -73,7 +73,7 @@ def remediate_finding(
     return remediation_detail(remediation)
 
 
-@router.get("/findings/{finding_id}/report", summary="Evidence report for a finding (json | markdown)")
+@router.get("/findings/{finding_id}/report", summary="Evidence report for a finding (json | markdown)", **deps.feature_gate("reports"))
 def finding_report(
     finding_id: int,
     format: str = Query(default="json", pattern="^(json|markdown)$"),
@@ -86,21 +86,21 @@ def finding_report(
 # ---------------------------------------------------------------- remediations
 
 
-@router.get("/remediations/{remediation_id}", response_model=RemediationDetail)
+@router.get("/remediations/{remediation_id}", response_model=RemediationDetail, **deps.feature_gate("remediation"))
 def get_remediation(remediation_id: int, db: Session = deps.DbDep):
     remediation = _get_remediation(db, remediation_id)
     expire_if_stale(db, remediation)
     return remediation_detail(remediation)
 
 
-@router.get("/remediations/{remediation_id}/validations", response_model=list[ValidationSummary])
+@router.get("/remediations/{remediation_id}/validations", response_model=list[ValidationSummary], **deps.feature_gate("validation"))
 def list_validations(remediation_id: int, db: Session = deps.DbDep):
     _get_remediation(db, remediation_id)
     rows = db.scalars(select(Validation).where(Validation.remediation_id == remediation_id).order_by(Validation.validation_id)).all()
     return [ValidationSummary.model_validate(v) for v in rows]
 
 
-@router.post("/remediations/{remediation_id}/validate", response_model=ValidationDetail, status_code=status.HTTP_202_ACCEPTED, summary="Validate in the Docker sandbox (background)")
+@router.post("/remediations/{remediation_id}/validate", response_model=ValidationDetail, status_code=status.HTTP_202_ACCEPTED, summary="Validate in the Docker sandbox (background)", **deps.feature_gate("validation"))
 def validate_remediation(
     remediation_id: int,
     background: BackgroundTasks,
@@ -126,7 +126,7 @@ def validate_remediation(
     return validation_detail(validation, None)
 
 
-@router.get("/remediations/{remediation_id}/report", summary="Evidence report for a remediation (json | markdown)")
+@router.get("/remediations/{remediation_id}/report", summary="Evidence report for a remediation (json | markdown)", **deps.feature_gate("reports"))
 def remediation_report(
     remediation_id: int,
     format: str = Query(default="json", pattern="^(json|markdown)$"),
@@ -137,7 +137,7 @@ def remediation_report(
     return report_response(factory(db), remediation.finding_id, remediation_id, format)
 
 
-@router.post("/remediations/{remediation_id}/pull-request", response_model=PullRequestDetail, status_code=status.HTTP_201_CREATED, summary="Create a draft GitHub pull request (201 opened, 200 prepared only, 502 GitHub refused)")
+@router.post("/remediations/{remediation_id}/pull-request", response_model=PullRequestDetail, status_code=status.HTTP_201_CREATED, summary="Create a draft GitHub pull request (201 opened, 200 prepared only, 502 GitHub refused)", **deps.feature_gate("pull_requests"))
 def create_pull_request(
     remediation_id: int,
     payload: PullRequestRequest | None = None,
@@ -165,7 +165,7 @@ def create_pull_request(
 # ---------------------------------------------------------------- validations
 
 
-@router.get("/validations/{validation_id}", response_model=ValidationDetail)
+@router.get("/validations/{validation_id}", response_model=ValidationDetail, **deps.feature_gate("validation"))
 def get_validation(validation_id: int, db: Session = deps.DbDep, factory=Depends(deps.get_validation_factory)):
     validation = db.get(Validation, validation_id)
     if validation is None:
@@ -175,7 +175,7 @@ def get_validation(validation_id: int, db: Session = deps.DbDep, factory=Depends
     return validation_detail(validation, logs)
 
 
-@router.get("/validations/{validation_id}/logs", response_class=Response, summary="Raw sandbox logs")
+@router.get("/validations/{validation_id}/logs", response_class=Response, summary="Raw sandbox logs", **deps.feature_gate("validation"))
 def get_validation_logs(validation_id: int, db: Session = deps.DbDep, factory=Depends(deps.get_validation_factory)):
     validation = db.get(Validation, validation_id)
     if validation is None:
@@ -186,13 +186,13 @@ def get_validation_logs(validation_id: int, db: Session = deps.DbDep, factory=De
 # ---------------------------------------------------------------- pull requests
 
 
-@router.get("/pull-requests", response_model=list[PullRequestSummary])
+@router.get("/pull-requests", response_model=list[PullRequestSummary], **deps.feature_gate("pull_requests"))
 def list_pull_requests(db: Session = deps.DbDep):
     rows = db.scalars(select(PullRequest).order_by(PullRequest.pr_id.desc())).all()
     return [PullRequestSummary.model_validate(p) for p in rows]
 
 
-@router.get("/pull-requests/{pr_id}", response_model=PullRequestDetail)
+@router.get("/pull-requests/{pr_id}", response_model=PullRequestDetail, **deps.feature_gate("pull_requests"))
 def get_pull_request(pr_id: int, db: Session = deps.DbDep):
     pr = db.get(PullRequest, pr_id)
     if pr is None:

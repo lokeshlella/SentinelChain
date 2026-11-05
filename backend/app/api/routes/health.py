@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app import __version__
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
+from app.core.features import current_phase, enabled_features
 from app.db.neo4j import check_neo4j
 from app.db.session import check_database
-from app.schemas.common import HealthResponse, ServiceStatus
+from app.schemas.common import FeaturesResponse, HealthResponse, ServiceStatus
+from app.services.vulnerabilities.osv_provider import OSVProvider
 
 router = APIRouter(tags=["health"])
 
@@ -25,6 +27,19 @@ def _check_ollama() -> tuple[bool, str]:
         return False, f"reachable but model '{settings.ollama_model}' not pulled (available: {models or 'none'})"
     except Exception as exc:  # noqa: BLE001
         return False, f"unreachable at {settings.ollama_base_url}: {str(exc)[:120]}"
+
+
+def _check_osv() -> tuple[bool, str]:
+    """OSV.dev is where every vulnerability verdict comes from; without it dependencies are UNKNOWN."""
+    settings = get_settings()
+    # A short probe: with no network the health page answers after 5 s, not after the full OSV timeout.
+    provider = OSVProvider(settings.osv_api_url, min(settings.osv_timeout, 5))
+    try:
+        return provider.health()
+    except Exception as exc:  # noqa: BLE001
+        return False, f"unreachable at {settings.osv_api_url}: {str(exc)[:120]}"
+    finally:
+        provider.close()
 
 
 def _check_docker() -> tuple[bool, str]:
@@ -62,15 +77,20 @@ def _check_github() -> tuple[bool, str]:
 
 
 @router.get("/health", response_model=HealthResponse, summary="Liveness + dependency health")
-def health() -> HealthResponse:
-    settings = get_settings()
+def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
+    features = enabled_features(settings)
+    # Only the services this build uses: a Phase-1 build never calls Ollama, Docker or GitHub.
     checks = {
         "postgresql": check_database(),
         "neo4j": check_neo4j(),
-        "ollama": _check_ollama(),
-        "docker": _check_docker(),
-        "github": _check_github(),
+        "osv": _check_osv(),
     }
+    if features["ai"] or features["remediation"]:
+        checks["ollama"] = _check_ollama()
+    if features["validation"]:
+        checks["docker"] = _check_docker()
+    if features["pull_requests"]:
+        checks["github"] = _check_github()
     services = [ServiceStatus(name=name, ok=ok, detail=detail) for name, (ok, detail) in checks.items()]
     # PostgreSQL is mandatory; everything else is optional and only degrades functionality.
     status = "ok" if checks["postgresql"][0] else "degraded"
@@ -86,3 +106,8 @@ def health() -> HealthResponse:
 @router.get("/health/live", summary="Simple liveness probe")
 def live() -> dict:
     return {"status": "ok"}
+
+
+@router.get("/features", response_model=FeaturesResponse, summary="Review phase and the features this build exposes")
+def features(settings: Settings = Depends(get_settings)) -> FeaturesResponse:
+    return FeaturesResponse(phase=current_phase(settings), features={n: True for n, on in enabled_features(settings).items() if on})

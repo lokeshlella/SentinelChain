@@ -108,6 +108,14 @@ Follow `docs/DEMO.md`; in short:
 4. Read the evidence report (`…/report?format=markdown`) — a real one is in
    `docs/EXAMPLE_EVIDENCE_REPORT.md`, the matching PR description in `docs/EXAMPLE_PR_DESCRIPTION.md`.
 
+### Phase-1 review build
+
+`SENTINEL_PHASE=1` presents only the deterministic half — ingestion, profiling, dependency extraction,
+OSV.dev detection, source-usage evidence and the Neo4j knowledge graph — and hides the AI agents,
+remediation, sandbox validation, evidence reports and pull requests (UI, API routes and `/docs`).
+`scripts/phase1-demo.sh start` runs it against its own database and ports; see `docs/PHASE1_REVIEW.md`.
+Unset (or `2`), the product is complete as described above.
+
 ## How a finding flows through the system
 
 | Stage | Module | What is real |

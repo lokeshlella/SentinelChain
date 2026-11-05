@@ -18,6 +18,10 @@ class NotFoundError(SentinelError):
     status_code = 404
 
 
+class FeatureNotEnabledError(NotFoundError):
+    """The route belongs to a feature this build does not expose (see app/core/features.py)."""
+
+
 class ValidationFailedError(SentinelError):
     """Invalid user input (bad URL, unsupported project, ...)."""
 

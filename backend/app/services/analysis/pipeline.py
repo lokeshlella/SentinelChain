@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import NotFoundError, SentinelError
+from app.core.features import feature_enabled
 from app.core.logging import get_stage_logger
 from app.core.paths import resolve_workspace_path
 from app.db.base import utcnow
@@ -46,6 +47,11 @@ ai_log = get_stage_logger("AI")
 STAGES = ("repository", "dependencies", "vulnerabilities", "usage", "knowledge_graph", "ai")
 
 
+def stages_for(settings: Settings) -> tuple[str, ...]:
+    """The stages this build runs: a Phase-1 build has no AI stage at all (not even SKIPPED)."""
+    return tuple(stage for stage in STAGES if stage != "ai" or feature_enabled("ai", settings))
+
+
 class AnalysisPipeline:
     """Runs one analysis end to end. All collaborators are injectable for tests."""
 
@@ -68,7 +74,9 @@ class AnalysisPipeline:
         self.vulnerabilities = vulnerability_service or VulnerabilityService(db, settings=self.settings)
         self.graph = graph_service or KnowledgeGraphService()
         self.usage = usage_analyzer or SourceUsageAnalyzer()
-        self.orchestrator = orchestrator  # None = AI disabled / unavailable
+        self.stages = stages_for(self.settings)
+        # None = AI disabled / unavailable; a build without the AI feature never talks to Ollama.
+        self.orchestrator = orchestrator if "ai" in self.stages else None
 
     # ------------------------------------------------------------------ public API
 
@@ -78,7 +86,7 @@ class AnalysisPipeline:
         analysis.status = AnalysisStatus.RUNNING
         analysis.started_at = utcnow()
         self._analysis = analysis
-        analysis.stages = {stage: StageStatus.PENDING for stage in STAGES}
+        analysis.stages = {stage: StageStatus.PENDING for stage in self.stages}
         analysis.summary = {"repository": repository.name, "warnings": []}
         analysis.error_message = None
         self._vulnerability_check_status = StageStatus.OK
@@ -92,7 +100,10 @@ class AnalysisPipeline:
             findings = self._stage_vulnerabilities(analysis, deps)
             component_usage = self._stage_usage(analysis, repository, repo_path, findings)
             self._stage_graph(analysis, repository, deps, findings, component_usage)
-            self._stage_ai(analysis, repository, findings, run_ai)
+            if "ai" in self.stages:
+                self._stage_ai(analysis, repository, findings, run_ai)
+            else:
+                self._mark_ai_not_run(findings)
             self._finalize(analysis, findings)
         except SentinelError as exc:
             self._fail(analysis, str(exc.message))
@@ -320,8 +331,20 @@ class AnalysisPipeline:
             self._set_stage(analysis, "ai", StageStatus.OK)
         self._commit()
 
+    def _mark_ai_not_run(self, findings: list[Finding]) -> None:
+        """A build without the AI stage: its findings are final, not waiting for agents (PENDING reads as
+        "running" on the Finding page of a build that has the AI feature)."""
+        for finding in findings:
+            if finding.ai_status == AIStatus.PENDING:
+                finding.ai_status = AIStatus.SKIPPED
+                finding.ai_error = "AI analysis was not run for this analysis"
+        self._commit()
+
     def _finalize(self, analysis: Analysis, findings: list[Finding]) -> None:
-        analysis.overall_risk = aggregate_overall_risk(findings)
+        # No findings means "nothing vulnerable" only when OSV answered for every dependency; when it
+        # could not (offline, partial outage) the honest overall answer is UNKNOWN, never a green NONE.
+        checked = getattr(self, "_vulnerability_check_status", StageStatus.OK) == StageStatus.OK
+        analysis.overall_risk = aggregate_overall_risk(findings) if findings or checked else RiskLevel.UNKNOWN
         analysis.status = AnalysisStatus.COMPLETED
         analysis.completed_at = utcnow()
         # The run succeeded, so any error recorded while it was in flight is stale: the heartbeat

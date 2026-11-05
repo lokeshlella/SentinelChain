@@ -17,6 +17,11 @@ class HealthResponse(BaseModel):
     services: list[ServiceStatus]
 
 
+class FeaturesResponse(BaseModel):
+    phase: int  # 1 = Phase-1 build, 2 = complete product
+    features: dict[str, bool]
+
+
 class ErrorResponse(BaseModel):
     error: str
     message: str

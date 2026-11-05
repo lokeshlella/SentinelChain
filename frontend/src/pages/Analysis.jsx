@@ -10,6 +10,7 @@ import ErrorBox from '../components/ErrorBox.jsx'
 import KeyValue from '../components/KeyValue.jsx'
 import JsonBlock from '../components/JsonBlock.jsx'
 import StageTracker from '../components/StageTracker.jsx'
+import { useFeatures } from '../features.jsx'
 import { aiSummary, fmtDate, fmtDuration, isActive, pkgLabel, sortByRisk } from '../utils/format.js'
 
 function Counter({ label, value, tone }) {
@@ -23,6 +24,7 @@ function Counter({ label, value, tone }) {
 
 export default function Analysis() {
   const { id } = useParams()
+  const { features } = useFeatures()
   const { data: analysis, error, loading, reload } = usePolling(
     () => api.get(`/analyses/${id}`),
     3000,
@@ -58,7 +60,9 @@ export default function Analysis() {
     ...(Array.isArray(summary.warnings) ? summary.warnings : []),
     ...(Array.isArray(deps.warnings) ? deps.warnings : []),
     ...(Array.isArray(vulns.notes) ? vulns.notes : []),
-  ]
+  ].filter((w) => features.ai || !/^AI analysis/i.test(String(w)))
+  // Stored by a build with the AI stage; this build shows only its own stages.
+  const { ai: _storedAi, ...summaryWithoutAi } = summary
   const active = isActive(status)
 
   return (
@@ -97,7 +101,7 @@ export default function Analysis() {
           <Counter label="Deps with source usage" value={usage.with_source_references} />
           <Counter label="Graph nodes" value={graph.nodes_written} />
           <Counter label="Graph relationships" value={graph.relationships_written} />
-          <Counter label="AI analysed" value={ai.completed} />
+          {features.ai && <Counter label="AI analysed" value={ai.completed} />}
         </div>
         <KeyValue
           columns={3}
@@ -111,14 +115,16 @@ export default function Analysis() {
             { label: 'OSV checked / safe / unknown', value: vulns.checked !== undefined ? `${vulns.checked} / ${vulns.safe ?? 0} / ${vulns.unknown ?? 0}` : null },
             { label: 'OSV provider', value: vulns.provider_available === undefined ? null : <StatusBadge value={vulns.provider_available ? 'OK' : 'UNAVAILABLE'} /> },
             { label: 'Knowledge graph', value: graph.available === undefined ? null : <StatusBadge value={graph.available ? 'OK' : 'UNAVAILABLE'} /> },
-            { label: 'AI model', value: ai.model },
-            { label: 'AI attempted / completed / failed', value: ai.hasCounters ? `${ai.attempted ?? 0} / ${ai.completed ?? 0} / ${ai.failed ?? 0}` : null },
-            { label: 'AI unavailable / skipped by limit', value: ai.hasCounters ? `${ai.unavailable ?? 0} / ${ai.skipped ?? 0}${ai.limit ? ` (limit ${ai.limit})` : ''}` : null },
-            ai.note ? { label: 'AI note', value: ai.note } : null,
+            ...(features.ai ? [
+              { label: 'AI model', value: ai.model },
+              { label: 'AI attempted / completed / failed', value: ai.hasCounters ? `${ai.attempted ?? 0} / ${ai.completed ?? 0} / ${ai.failed ?? 0}` : null },
+              { label: 'AI unavailable / skipped by limit', value: ai.hasCounters ? `${ai.unavailable ?? 0} / ${ai.skipped ?? 0}${ai.limit ? ` (limit ${ai.limit})` : ''}` : null },
+              ai.note ? { label: 'AI note', value: ai.note } : null,
+            ] : []),
           ]}
         />
         {graph.error && <div className="alert info">Knowledge graph: {graph.error}</div>}
-        <JsonBlock title="Raw summary JSON" data={summary} />
+        <JsonBlock title="Raw summary JSON" data={features.ai ? summary : summaryWithoutAi} />
       </Section>
 
       {warnings.length > 0 && (
@@ -129,7 +135,12 @@ export default function Analysis() {
         </Section>
       )}
 
-      <Section title={`Findings${findings ? ` (${findings.length})` : ''}`} subtitle="Sorted by risk level. Risk is assigned by the AI risk agent; findings without AI results keep the deterministic default.">
+      <Section
+        title={`Findings${findings ? ` (${findings.length})` : ''}`}
+        subtitle={features.ai
+          ? 'Sorted by risk level. Risk is assigned by the AI risk agent; findings without AI results keep the deterministic default.'
+          : 'Sorted by risk level. Risk follows the severity OSV.dev reports for the advisory.'}
+      >
         {active && <p className="muted">Findings will appear once the analysis completes.</p>}
         {!active && findingsError && <ErrorBox error={findingsError} title="Could not load findings" />}
         {!active && !findings && !findingsError && <Loading text="Loading findings…" />}
@@ -137,7 +148,9 @@ export default function Analysis() {
           <Table
             rows={findings}
             rowKey={(f) => f.finding_id}
-            empty="No vulnerable dependencies found."
+            empty={vulns.provider_available === false
+              ? 'OSV.dev could not be reached: dependencies are UNKNOWN (not checked), not safe.'
+              : 'No vulnerable dependencies found.'}
             columns={[
               { key: 'finding_id', label: 'Finding', render: (f) => <Link to={`/findings/${f.finding_id}`}>#{f.finding_id}</Link> },
               { key: 'package', label: 'Package', render: (f) => <span className="mono">{pkgLabel(f.dependency)}</span> },
@@ -146,10 +159,10 @@ export default function Analysis() {
               { key: 'severity', label: 'Severity', render: (f) => <StatusBadge value={f.vulnerability?.severity} /> },
               { key: 'cvss', label: 'CVSS', render: (f) => f.vulnerability?.cvss_score },
               { key: 'risk_level', label: 'Risk', render: (f) => <StatusBadge value={f.risk_level} /> },
-              { key: 'impact_level', label: 'Impact', render: (f) => f.impact_level ? <StatusBadge value={f.impact_level} /> : null },
+              features.ai && { key: 'impact_level', label: 'Impact', render: (f) => f.impact_level ? <StatusBadge value={f.impact_level} /> : null },
               { key: 'components', label: 'Affected components', render: (f) => (f.affected_components || []).length ? f.affected_components.map((c) => <code key={c} className="chip">{c}</code>) : null },
-              { key: 'ai_status', label: 'AI', render: (f) => <StatusBadge value={f.ai_status} /> },
-            ]}
+              features.ai && { key: 'ai_status', label: 'AI', render: (f) => <StatusBadge value={f.ai_status} /> },
+            ].filter(Boolean)}
           />
         )}
       </Section>

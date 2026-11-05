@@ -10,6 +10,7 @@ import ErrorBox from '../components/ErrorBox.jsx'
 import KeyValue from '../components/KeyValue.jsx'
 import JsonBlock from '../components/JsonBlock.jsx'
 import DiffView from '../components/DiffView.jsx'
+import { useFeatures } from '../features.jsx'
 import { asList, fmtDate, fmtPercent, isActive, pkgLabel } from '../utils/format.js'
 
 // candidates may be {versions: [...]} / {fixed_versions: [...]} / a list — normalise to rows.
@@ -46,6 +47,7 @@ function candidateColumns(rows) {
 }
 
 export default function Remediation() {
+  const { features } = useFeatures()
   const { id } = useParams()
   const navigate = useNavigate()
   const { data: rem, error, loading, reload } = usePolling(
@@ -219,69 +221,73 @@ export default function Remediation() {
         ) : <p className="muted">No change proposed{rem.error_message ? ` — ${rem.error_message}` : ''}.</p>}
       </Section>
 
-      <Section
-        title={`Validations (${validations.length})`}
-        subtitle="Each validation installs the patched dependencies in a Docker sandbox, runs the project's tests and re-checks OSV."
-        actions={
-          <button type="button" className="btn primary" disabled={!canValidate || validateBusy} onClick={validate} title={canValidate ? '' : 'A proposed change is required before validating'}>
-            {validateBusy ? <><span className="spinner light" /> Starting…</> : 'Validate in Docker sandbox'}
-          </button>
-        }
-      >
-        {validateError && <ErrorBox error={validateError} title="Could not start the validation" />}
-        <Table
-          rows={validations}
-          rowKey={(v) => v.validation_id}
-          empty="Not validated yet."
-          columns={[
-            { key: 'validation_id', label: 'Validation', render: (v) => <Link to={`/validations/${v.validation_id}`}>#{v.validation_id}</Link> },
-            { key: 'status', label: 'Status', render: (v) => <StatusBadge value={v.status} /> },
-            { key: 'build_status', label: 'Build', render: (v) => <StatusBadge value={v.build_status} /> },
-            { key: 'test_status', label: 'Tests', render: (v) => <StatusBadge value={v.test_status} /> },
-            { key: 'security_scan_status', label: 'Security', render: (v) => <StatusBadge value={v.security_scan_status} /> },
-            { key: 'overall_result', label: 'Overall', render: (v) => <StatusBadge value={v.overall_result} /> },
-            { key: 'validated_at', label: 'Validated', render: (v) => fmtDate(v.validated_at || v.created_at) },
-            { key: 'error_message', label: 'Error', render: (v) => v.error_message ? <span className="danger-text small">{v.error_message}</span> : null },
-          ]}
-        />
-      </Section>
-
-      <Section
-        title={`Pull requests (${pullRequests.length})`}
-        subtitle="Creates a branch with the validated change and opens a DRAFT pull request on GitHub (never merged automatically). Without credentials the PR is recorded as UNAVAILABLE with manual instructions."
-        actions={
-          <>
-            {(validationFailed || (!validationPassed && !validationPartial)) && (
-              <label className="check" title="Create the PR even though the validation did not pass">
-                <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} disabled={prBusy} />
-                force (skip validation gate)
-              </label>
-            )}
-            <button type="button" className="btn primary" disabled={prBusy || !change} onClick={createPr}>
-              {prBusy ? <><span className="spinner light" /> Creating…</> : 'Create draft pull request'}
+      {features.validation && (
+        <Section
+          title={`Validations (${validations.length})`}
+          subtitle="Each validation installs the patched dependencies in a Docker sandbox, runs the project's tests and re-checks OSV."
+          actions={
+            <button type="button" className="btn primary" disabled={!canValidate || validateBusy} onClick={validate} title={canValidate ? '' : 'A proposed change is required before validating'}>
+              {validateBusy ? <><span className="spinner light" /> Starting…</> : 'Validate in Docker sandbox'}
             </button>
-          </>
-        }
-      >
-        {validationFailed && <div className="alert error">The latest validation failed. Tick "force" to create the pull request anyway.</div>}
-        {validationPartial && !validationPassed && <div className="alert info"><strong>Partially validated:</strong> the change installs and the OSV scan is clean, but no test suite ran (overall <StatusBadge value={latestValidation.overall_result} />). A draft PR can be opened; the change must be tested manually before merging.</div>}
-        {!latestValidation && change && <div className="alert info">No validation has been run yet. The backend may refuse to open a PR without a passing validation unless "force" is ticked.</div>}
-        {prError && <ErrorBox error={prError} title="Could not create the pull request" />}
-        <Table
-          rows={pullRequests}
-          rowKey={(p) => p.pr_id}
-          empty="No pull request yet."
-          columns={[
-            { key: 'pr_id', label: 'PR', render: (p) => <Link to={`/pull-requests/${p.pr_id}`}>#{p.pr_id}</Link> },
-            { key: 'title', label: 'Title' },
-            { key: 'review_status', label: 'Status', render: (p) => <StatusBadge value={p.review_status} /> },
-            { key: 'branch_name', label: 'Branch', render: (p) => p.branch_name ? <span className="mono small">{p.branch_name}</span> : null },
-            { key: 'pr_url', label: 'GitHub', render: (p) => p.pr_url ? <a href={p.pr_url} target="_blank" rel="noreferrer">{p.pr_number ? `#${p.pr_number}` : 'open'} ↗</a> : null },
-            { key: 'created_at', label: 'Created', render: (p) => fmtDate(p.created_at) },
-            { key: 'error_message', label: 'Error', render: (p) => p.error_message ? <span className="danger-text small">{p.error_message}</span> : null },
-          ]}
-        />
-      </Section>
+          }
+        >
+          {validateError && <ErrorBox error={validateError} title="Could not start the validation" />}
+          <Table
+            rows={validations}
+            rowKey={(v) => v.validation_id}
+            empty="Not validated yet."
+            columns={[
+              { key: 'validation_id', label: 'Validation', render: (v) => <Link to={`/validations/${v.validation_id}`}>#{v.validation_id}</Link> },
+              { key: 'status', label: 'Status', render: (v) => <StatusBadge value={v.status} /> },
+              { key: 'build_status', label: 'Build', render: (v) => <StatusBadge value={v.build_status} /> },
+              { key: 'test_status', label: 'Tests', render: (v) => <StatusBadge value={v.test_status} /> },
+              { key: 'security_scan_status', label: 'Security', render: (v) => <StatusBadge value={v.security_scan_status} /> },
+              { key: 'overall_result', label: 'Overall', render: (v) => <StatusBadge value={v.overall_result} /> },
+              { key: 'validated_at', label: 'Validated', render: (v) => fmtDate(v.validated_at || v.created_at) },
+              { key: 'error_message', label: 'Error', render: (v) => v.error_message ? <span className="danger-text small">{v.error_message}</span> : null },
+            ]}
+          />
+        </Section>
+      )}
+
+      {features.pull_requests && (
+        <Section
+          title={`Pull requests (${pullRequests.length})`}
+          subtitle="Creates a branch with the validated change and opens a DRAFT pull request on GitHub (never merged automatically). Without credentials the PR is recorded as UNAVAILABLE with manual instructions."
+          actions={
+            <>
+              {(validationFailed || (!validationPassed && !validationPartial)) && (
+                <label className="check" title="Create the PR even though the validation did not pass">
+                  <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} disabled={prBusy} />
+                  force (skip validation gate)
+                </label>
+              )}
+              <button type="button" className="btn primary" disabled={prBusy || !change} onClick={createPr}>
+                {prBusy ? <><span className="spinner light" /> Creating…</> : 'Create draft pull request'}
+              </button>
+            </>
+          }
+        >
+          {validationFailed && <div className="alert error">The latest validation failed. Tick "force" to create the pull request anyway.</div>}
+          {validationPartial && !validationPassed && <div className="alert info"><strong>Partially validated:</strong> the change installs and the OSV scan is clean, but no test suite ran (overall <StatusBadge value={latestValidation.overall_result} />). A draft PR can be opened; the change must be tested manually before merging.</div>}
+          {!latestValidation && change && <div className="alert info">No validation has been run yet. The backend may refuse to open a PR without a passing validation unless "force" is ticked.</div>}
+          {prError && <ErrorBox error={prError} title="Could not create the pull request" />}
+          <Table
+            rows={pullRequests}
+            rowKey={(p) => p.pr_id}
+            empty="No pull request yet."
+            columns={[
+              { key: 'pr_id', label: 'PR', render: (p) => <Link to={`/pull-requests/${p.pr_id}`}>#{p.pr_id}</Link> },
+              { key: 'title', label: 'Title' },
+              { key: 'review_status', label: 'Status', render: (p) => <StatusBadge value={p.review_status} /> },
+              { key: 'branch_name', label: 'Branch', render: (p) => p.branch_name ? <span className="mono small">{p.branch_name}</span> : null },
+              { key: 'pr_url', label: 'GitHub', render: (p) => p.pr_url ? <a href={p.pr_url} target="_blank" rel="noreferrer">{p.pr_number ? `#${p.pr_number}` : 'open'} ↗</a> : null },
+              { key: 'created_at', label: 'Created', render: (p) => fmtDate(p.created_at) },
+              { key: 'error_message', label: 'Error', render: (p) => p.error_message ? <span className="danger-text small">{p.error_message}</span> : null },
+            ]}
+          />
+        </Section>
+      )}
 
       <p><Link to={`/findings/${rem.finding_id}`}>← Back to finding #{rem.finding_id}</Link></p>
     </div>

@@ -40,6 +40,20 @@ class Settings(BaseSettings):
         "X-API-Key header (or ?api_key=). Leave empty for a local single-user setup.",
     )
 
+    # --- Project phase -----------------------------------------------------
+    sentinel_phase: int = Field(
+        default=2,
+        description="Which review phase this build presents. 2 (default) is the complete product. "
+        "1 is the Phase-1 build: repository ingestion, dependency extraction, OSV.dev detection, "
+        "source-usage evidence and the knowledge graph, without the AI agents, remediation, sandbox "
+        "validation, evidence reports and pull requests. See app/core/features.py.",
+    )
+    sentinel_features: str = Field(
+        default="",
+        description="Comma-separated Phase-2 features to add to a Phase-1 build "
+        "(ai, remediation, validation, reports, pull_requests). Ignored in phase 2.",
+    )
+
     # --- PostgreSQL --------------------------------------------------------
     database_url: str = "postgresql+psycopg://sentinel:sentinel@localhost:5432/sentinelchain"
 

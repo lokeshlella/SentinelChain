@@ -11,7 +11,10 @@ from collections.abc import Callable
 from fastapi import Depends
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.openapi import FEATURE_KEY
 from app.core.config import Settings, get_settings
+from app.core.exceptions import FeatureNotEnabledError
+from app.core.features import current_phase, feature_enabled
 from app.core.logging import get_stage_logger
 from app.db.session import get_db, get_session_factory
 from app.services.agents.orchestrator import AIOrchestrator
@@ -28,6 +31,34 @@ log = get_stage_logger("API")
 
 DbDep = Depends(get_db)
 SettingsDep = Depends(get_settings)
+
+
+FEATURE_LABELS = {
+    "ai": "AI analysis",
+    "remediation": "Remediation",
+    "validation": "Sandbox validation",
+    "reports": "Evidence reports",
+    "pull_requests": "Pull requests",
+}
+
+
+def require_feature(name: str):
+    """Route dependency: 404 for a feature this build does not expose (SENTINEL_PHASE / SENTINEL_FEATURES)."""
+
+    def check(settings: Settings = SettingsDep) -> None:
+        if not feature_enabled(name, settings):
+            raise FeatureNotEnabledError(
+                f"{FEATURE_LABELS.get(name, name)} is not enabled in this build",
+                details={"feature": name, "phase": current_phase(settings)},
+            )
+
+    return Depends(check)
+
+
+def feature_gate(name: str) -> dict:
+    """Route-decorator arguments for a gated route: the 404 dependency plus the OpenAPI marker that
+    keeps the operation out of the docs of a build without the feature (app.api.openapi)."""
+    return {"dependencies": [require_feature(name)], "openapi_extra": {FEATURE_KEY: name}}
 
 
 def get_session_maker() -> sessionmaker[Session]:
