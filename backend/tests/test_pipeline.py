@@ -10,7 +10,7 @@ import pytest
 from app.core.config import Settings
 from app.db.base import utcnow
 from app.models import Analysis, Finding
-from app.models.enums import AIStatus, AnalysisStatus, StageStatus, VulnerabilityStatus
+from app.models.enums import AIStatus, AnalysisStatus, RiskLevel, StageStatus, VulnerabilityStatus
 from app.services.agents.orchestrator import AIOrchestrator
 from app.services.analysis.pipeline import AnalysisPipeline
 from app.services.analysis.usage import SourceUsageAnalyzer
@@ -103,6 +103,8 @@ def test_osv_unavailable_degrades_to_unknown_never_safe(db, settings, repository
     assert {d.vulnerability_status for d in analysis.dependencies} == {VulnerabilityStatus.UNKNOWN}
     assert all("unavailable" in (d.status_reason or "").lower() or "pinned" in (d.status_reason or "") for d in analysis.dependencies)
     assert analysis.findings == []
+    # Nothing could be checked, so nothing is known to be safe: UNKNOWN, not a green NONE.
+    assert analysis.overall_risk == RiskLevel.UNKNOWN
     assert analysis.stages["ai"] == StageStatus.SKIPPED
     assert any("Vulnerability check unavailable" in w for w in analysis.summary["warnings"])
 

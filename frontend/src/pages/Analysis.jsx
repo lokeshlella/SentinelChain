@@ -148,7 +148,9 @@ export default function Analysis() {
           <Table
             rows={findings}
             rowKey={(f) => f.finding_id}
-            empty="No vulnerable dependencies found."
+            empty={vulns.provider_available === false
+              ? 'OSV.dev could not be reached: dependencies are UNKNOWN (not checked), not safe.'
+              : 'No vulnerable dependencies found.'}
             columns={[
               { key: 'finding_id', label: 'Finding', render: (f) => <Link to={`/findings/${f.finding_id}`}>#{f.finding_id}</Link> },
               { key: 'package', label: 'Package', render: (f) => <span className="mono">{pkgLabel(f.dependency)}</span> },

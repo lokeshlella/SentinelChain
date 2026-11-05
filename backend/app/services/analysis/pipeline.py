@@ -341,7 +341,10 @@ class AnalysisPipeline:
         self._commit()
 
     def _finalize(self, analysis: Analysis, findings: list[Finding]) -> None:
-        analysis.overall_risk = aggregate_overall_risk(findings)
+        # No findings means "nothing vulnerable" only when OSV answered for every dependency; when it
+        # could not (offline, partial outage) the honest overall answer is UNKNOWN, never a green NONE.
+        checked = getattr(self, "_vulnerability_check_status", StageStatus.OK) == StageStatus.OK
+        analysis.overall_risk = aggregate_overall_risk(findings) if findings or checked else RiskLevel.UNKNOWN
         analysis.status = AnalysisStatus.COMPLETED
         analysis.completed_at = utcnow()
         # The run succeeded, so any error recorded while it was in flight is stale: the heartbeat

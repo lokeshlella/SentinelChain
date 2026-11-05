@@ -71,6 +71,15 @@ print("" if value is None else (json.dumps(value) if isinstance(value, (dict, li
 }
 
 port_pid() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -1 || true; }
+
+# Starts a server in its own session, keeping the pid (so the pid file stays right): Ctrl+C or closing
+# the terminal cannot reach it. nohup alone is not enough — node resets SIGHUP and uvicorn traps SIGINT.
+DETACH='import os, sys
+try:
+    os.setsid()
+except OSError:
+    pass
+os.execvp(sys.argv[1], sys.argv[1:])'
 pid_alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 read_pid() { [ -f "$RUN_DIR/$1.pid" ] && cat "$RUN_DIR/$1.pid" || true; }
 
@@ -164,7 +173,7 @@ start_backend() {
   (
     backend_env
     cd "$ROOT/backend"
-    nohup "$VENV/bin/uvicorn" app.main:app --host 127.0.0.1 --port "$API_PORT" >"$RUN_DIR/backend.log" 2>&1 &
+    nohup "$VENV/bin/python" -c "$DETACH" "$VENV/bin/uvicorn" app.main:app --host 127.0.0.1 --port "$API_PORT" >"$RUN_DIR/backend.log" 2>&1 &
     echo $! >"$RUN_DIR/backend.pid"
   )
   wait_for 40 backend curl -fsS -m 2 "$API/health/live" || fail "backend did not start — see $RUN_DIR/backend.log"
@@ -186,7 +195,7 @@ start_frontend() {
     || fail "frontend build failed — see $RUN_DIR/frontend-build.log"
   (
     cd "$ROOT/frontend"
-    VITE_API_PROXY="http://127.0.0.1:$API_PORT" nohup ./node_modules/.bin/vite preview --host "$host" --port "$WEB_PORT" --strictPort \
+    VITE_API_PROXY="http://127.0.0.1:$API_PORT" nohup "$VENV/bin/python" -c "$DETACH" ./node_modules/.bin/vite preview --host "$host" --port "$WEB_PORT" --strictPort \
       >"$RUN_DIR/frontend.log" 2>&1 &
     echo $! >"$RUN_DIR/frontend.pid"
   )
@@ -270,8 +279,14 @@ except Exception:
   elif [ -n "$free_mb" ]; then
     ok "memory: ${free_mb} MB free"
   fi
+  if [ "$(curl -fsS -m 3 "$WEB/api/features" 2>/dev/null | json phase)" = "1" ]; then
+    ok "dashboard answers at $WEB"
+  else
+    problems=$((problems + 1))
+    warn "the dashboard at $WEB is not answering — run 'scripts/phase1-demo.sh start' again"
+  fi
   local ready
-  ready="$(latest_completed_analysis)"
+  ready="$(latest_completed_analysis || true)"
   if [ -n "$ready" ]; then
     ok "ready-made analysis to fall back on: $ready"
   else

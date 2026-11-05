@@ -35,7 +35,9 @@ scripts/phase1-demo.sh prepare          # registers examples/demo-project and ru
 ```
 
 `start` must end with **All checks passed**. `prepare` gives you a finished analysis to fall back on if
-the venue has no internet. Then rehearse the click path below once, and:
+the venue has no internet. Then rehearse the click path below once. **After rehearsing, delete the GitHub
+repository you added** (its page → *Delete repository* → OK; this also removes its working copy and graph
+nodes) so that step 2 registers it fresh during the review — keep repository #101. Also:
 
 * macOS **Focus → Do Not Disturb** on, so no notification banners appear on the projector.
 * Charge the laptop and bring the charger.
@@ -62,8 +64,11 @@ Open **http://localhost:4173**. The header reads *Agentic AI for Secure Software
    The repository page shows *Ingesting…* while it clones, then the **profile**: language, components
    (`src`, `test`, `tests`), dependency files, test hints. *"We clone into our own workspace — the
    original is never modified."*
-   No internet? Use the local path printed by the script (`…/examples/demo-project`) — it is already
-   registered as repository #101, so open it from the dashboard instead.
+   If it says *already registered*, it is left over from a rehearsal: open it from the dashboard's
+   repository list and continue.
+   **No internet? Do not press Analyze** — without OSV.dev every dependency is UNKNOWN and the new analysis
+   has no findings. Open **Dashboard → Recent analyses → #1** (the ready-made run, real OSV data) and continue
+   from step 4 with it.
 3. **Analyze.** The analysis page polls every 3 s through five stages — Repository, Dependencies,
    Vulnerabilities, Source usage, Knowledge graph — and completes in about 10 s.
 4. **Summary.** Tonight's run found 18 dependencies (17 PyPI, 1 npm), 6 vulnerable, 15 findings, overall
@@ -89,8 +94,9 @@ Open **http://localhost:4173**. The header reads *Agentic AI for Secure Software
 
    or everything for that repository: `MATCH p = (:Repository {repository_id: 102})-[*1..3]->() RETURN p`.
 8. **System health**: PostgreSQL, Neo4j and OSV.dev all OK.
-9. **Robustness** (if time allows): add `not a url` → a clear validation message; add the same GitHub URL
-   again → *already registered*. *"Failures are reported, never hidden: if OSV is unreachable, dependencies
+9. **Robustness** (if time allows): add `not a url` → a clear validation message; add the local path
+   `…/examples/demo-project` → *already registered* (the local path answers instantly; the same check for a
+   GitHub URL needs the network). *"Failures are reported, never hidden: if OSV is unreachable, dependencies
    become UNKNOWN — never SAFE."*
 
 Avoid opening on screen: the GitHub page of `sentinel-chain-demo` (its *Pull requests* tab shows the
@@ -111,8 +117,9 @@ pipeline). If you would rather hide that PR for the day, close it and reopen it 
   Neo4j is the relationship view built from it.
 * **What if OSV is down?** The stage reports UNAVAILABLE and dependencies are UNKNOWN — the system never
   reports a package as safe without having checked it.
-* **Can we see the API?** http://127.0.0.1:8001/docs lists the Phase-1 endpoints. A few response fields
-  (`ai_status`, `remediations`) are already part of the data model and stay empty until Phase 2 fills them.
+* **Can we see the API?** http://127.0.0.1:8001/docs lists the Phase-1 endpoints (the page loads its
+  viewer from the internet). A few response fields (`ai_status`, `remediations`) are already part of the data
+  model and stay empty until Phase 2 fills them.
 * **What comes in Phase 2?** The agentic layer: three LLM agents (local Ollama, Pydantic-validated
   output that separates FACT from INFERENCE), remediation with deterministic version candidates,
   validation in an isolated Docker sandbox, an evidence report, and a draft GitHub pull request — never
@@ -122,7 +129,8 @@ pipeline). If you would rather hide that PR for the day, close it and reopen it 
 
 | What you see | What to do |
 |---|---|
-| `OSV.dev … NO INTERNET` in the checks | Switch to the phone hotspot and run `scripts/phase1-demo.sh check`. Still offline: present the ready-made analysis (repository #101) — it is a real run from last night. |
+| `OSV.dev … NO INTERNET` in the checks | Switch to the phone hotspot and run `scripts/phase1-demo.sh check`. Still offline: **do not press Analyze**; present Dashboard → Recent analyses → #1, the ready-made run with real OSV data. |
+| A live analysis shows Vulnerabilities `UNAVAILABLE` (Wi-Fi dropped mid-demo) | Say so — *"OSV could not be reached, so nothing is reported safe: overall risk UNKNOWN"* — then open analysis #1 from the dashboard. |
 | `Neo4j is still starting` | Wait 30–60 s, then `scripts/phase1-demo.sh check`. |
 | `port 4173 (or 8001) is in use by another process` | Quit that program, or start on other ports: `DEMO_WEB_PORT=4174 DEMO_API_PORT=8002 scripts/phase1-demo.sh start`. |
 | `Docker did not start` | Open Docker Desktop from Applications, wait for the whale icon to settle, run `start` again. |
